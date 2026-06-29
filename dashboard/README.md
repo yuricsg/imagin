@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Imagin Dashboard
+
+Next.js dashboard and embeddable chatbot UI for Imagin lead capture. The dashboard is a multi-chatbot operations surface; the Dra. Renata Reis bot is only the first configured bot.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and run the development server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The dashboard expects the backend at `http://localhost:4000` by default. Override it with:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 npm run dev
+```
 
-## Learn More
+When running the dashboard on a non-default port, also set the widget origin used in the dashboard snippet:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 NEXT_PUBLIC_WIDGET_BASE_URL=http://localhost:3002 npm run dev -- --port 3002
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Embed Snippet
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The client site can load a chatbot with:
 
-## Deploy on Vercel
+```html
+<script
+  src="http://localhost:3000/embed/widget.js"
+  data-api-base-url="http://localhost:4000"
+  data-bot-id="dra-renata-reis"
+  data-client-id="clinica-renata"
+></script>
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The widget iframe lives at `/chatbots/[botId]/embed`. The script fetches public bot configuration from the backend, then injects the floating launcher and iframe.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Validation
+
+```bash
+npm run lint
+npm run build
+```
