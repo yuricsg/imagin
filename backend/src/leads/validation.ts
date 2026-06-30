@@ -1,7 +1,5 @@
-import {
-  buildWhatsAppUrl,
-  getChatbotDefinition,
-} from "../chatbots/catalog.js";
+import { buildWhatsAppUrl } from "../chatbots/catalog.js";
+import type { ChatbotDefinition } from "../chatbots/types.js";
 import type {
   CreateLeadRecordInput,
   LeadIntent,
@@ -17,11 +15,11 @@ type ValidationResult =
 export function validateLeadSubmission(
   botId: string,
   rawBody: unknown,
+  chatbot: ChatbotDefinition,
 ): ValidationResult {
   const issues: string[] = [];
-  const chatbot = getChatbotDefinition(botId);
 
-  if (!chatbot) {
+  if (botId !== chatbot.botId) {
     issues.push("botId is not supported");
   }
 
@@ -56,7 +54,6 @@ export function validateLeadSubmission(
 
     if (
       medicalRequestStatus &&
-      chatbot &&
       !chatbot.medicalRequestOptions.includes(medicalRequestStatus)
     ) {
       issues.push("medicalRequestStatus is not supported");
@@ -80,7 +77,6 @@ export function validateLeadSubmission(
 
     if (
       consultationNeed &&
-      chatbot &&
       !chatbot.consultationNeeds.includes(consultationNeed)
     ) {
       issues.push("consultationNeed is not supported");
@@ -88,7 +84,6 @@ export function validateLeadSubmission(
 
     if (
       consultationDecision &&
-      chatbot &&
       !chatbot.consultationDecisions.includes(consultationDecision)
     ) {
       issues.push("consultationDecision is not supported");
@@ -107,13 +102,8 @@ export function validateLeadSubmission(
 
 export function buildLeadRecordInput(
   submission: LeadSubmission,
+  chatbot: ChatbotDefinition,
 ): CreateLeadRecordInput {
-  const chatbot = getChatbotDefinition(submission.botId);
-
-  if (!chatbot) {
-    throw new Error(`Unsupported chatbot: ${submission.botId}`);
-  }
-
   const whatsappMessage = chatbot.formatWhatsAppMessage(submission);
 
   return {
@@ -192,9 +182,64 @@ function readSource(value: unknown): LeadSource {
 
   return {
     pageUrl: readOptionalString(value.pageUrl) || undefined,
+    landingPageUrl: readOptionalString(value.landingPageUrl) || undefined,
     referrer: readOptionalString(value.referrer) || undefined,
     parentOrigin: readOptionalString(value.parentOrigin) || undefined,
+    utm: readUtm(value.utm),
+    clickIds: readClickIds(value.clickIds),
+    cookies: readAttributionCookies(value.cookies),
   };
+}
+
+function readUtm(value: unknown): LeadSource["utm"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const utm = {
+    source: readOptionalString(value.source) || undefined,
+    medium: readOptionalString(value.medium) || undefined,
+    campaign: readOptionalString(value.campaign) || undefined,
+    content: readOptionalString(value.content) || undefined,
+    term: readOptionalString(value.term) || undefined,
+    id: readOptionalString(value.id) || undefined,
+  };
+
+  return hasAnyValue(utm) ? utm : undefined;
+}
+
+function readClickIds(value: unknown): LeadSource["clickIds"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const clickIds = {
+    fbclid: readOptionalString(value.fbclid) || undefined,
+    gclid: readOptionalString(value.gclid) || undefined,
+    gbraid: readOptionalString(value.gbraid) || undefined,
+    wbraid: readOptionalString(value.wbraid) || undefined,
+    msclkid: readOptionalString(value.msclkid) || undefined,
+  };
+
+  return hasAnyValue(clickIds) ? clickIds : undefined;
+}
+
+function readAttributionCookies(value: unknown): LeadSource["cookies"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const cookies = {
+    fbp: readOptionalString(value.fbp) || undefined,
+    fbc: readOptionalString(value.fbc) || undefined,
+    gaClientId: readOptionalString(value.gaClientId) || undefined,
+  };
+
+  return hasAnyValue(cookies) ? cookies : undefined;
+}
+
+function hasAnyValue(value: Record<string, string | undefined>) {
+  return Object.values(value).some(Boolean);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

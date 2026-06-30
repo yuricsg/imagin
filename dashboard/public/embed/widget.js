@@ -120,9 +120,12 @@
     }
 
     const url = new URL(`/chatbots/${encodeURIComponent(botId)}/embed`, appOrigin);
+    const attribution = collectAttribution();
+
     url.searchParams.set("clientId", clientId);
     url.searchParams.set("parentOrigin", window.location.origin);
     url.searchParams.set("pageUrl", window.location.href);
+    url.searchParams.set("attribution", JSON.stringify(attribution));
 
     iframe = document.createElement("iframe");
     iframe.className = "imagin-frame";
@@ -212,4 +215,97 @@
   mount.appendChild(style);
   mount.appendChild(panel);
   mount.appendChild(launcher);
+
+  function collectAttribution() {
+    const currentUrl = new URL(window.location.href);
+    const landingPageUrl = getLandingPageUrl();
+
+    return {
+      pageUrl: window.location.href,
+      landingPageUrl,
+      referrer: document.referrer || undefined,
+      parentOrigin: window.location.origin,
+      utm: compactObject({
+        source: currentUrl.searchParams.get("utm_source"),
+        medium: currentUrl.searchParams.get("utm_medium"),
+        campaign: currentUrl.searchParams.get("utm_campaign"),
+        content: currentUrl.searchParams.get("utm_content"),
+        term: currentUrl.searchParams.get("utm_term"),
+        id: currentUrl.searchParams.get("utm_id"),
+      }),
+      clickIds: compactObject({
+        fbclid: currentUrl.searchParams.get("fbclid"),
+        gclid: currentUrl.searchParams.get("gclid"),
+        gbraid: currentUrl.searchParams.get("gbraid"),
+        wbraid: currentUrl.searchParams.get("wbraid"),
+        msclkid: currentUrl.searchParams.get("msclkid"),
+      }),
+      cookies: compactObject({
+        fbp: readCookie("_fbp"),
+        fbc: readCookie("_fbc") || buildFbcFromFbclid(currentUrl),
+        gaClientId: readGaClientId(),
+      }),
+    };
+  }
+
+  function getLandingPageUrl() {
+    try {
+      const key = "imagin:landingPageUrl";
+      const stored = window.sessionStorage.getItem(key);
+
+      if (stored) {
+        return stored;
+      }
+
+      window.sessionStorage.setItem(key, window.location.href);
+      return window.location.href;
+    } catch {
+      return window.location.href;
+    }
+  }
+
+  function readCookie(name) {
+    return document.cookie
+      .split(";")
+      .map(function (entry) {
+        return entry.trim();
+      })
+      .find(function (entry) {
+        return entry.startsWith(`${name}=`);
+      })
+      ?.split("=")
+      .slice(1)
+      .join("=") || undefined;
+  }
+
+  function readGaClientId() {
+    const gaCookie = readCookie("_ga");
+
+    if (!gaCookie) {
+      return undefined;
+    }
+
+    const parts = gaCookie.split(".");
+    const clientIdParts = parts.slice(-2);
+
+    return clientIdParts.length === 2 ? clientIdParts.join(".") : undefined;
+  }
+
+  function buildFbcFromFbclid(currentUrl) {
+    const fbclid = currentUrl.searchParams.get("fbclid");
+
+    if (!fbclid) {
+      return undefined;
+    }
+
+    return `fb.1.${Date.now()}.${fbclid}`;
+  }
+
+  function compactObject(value) {
+    return Object.fromEntries(
+      Object.entries(value).filter(function (entry) {
+        return entry[1] !== undefined && entry[1] !== null && entry[1] !== "";
+      }),
+    );
+  }
 })();

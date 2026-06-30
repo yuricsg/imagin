@@ -1,14 +1,18 @@
 import { renataReisChatbot } from "./renata-reis.js";
 import type { ChatbotDefinition, PublicChatbotConfig } from "./types.js";
 
-const chatbotDefinitions = [renataReisChatbot] satisfies ChatbotDefinition[];
+export const staticChatbotDefinitions = [
+  renataReisChatbot,
+] satisfies ChatbotDefinition[];
 
 export function listChatbots(): PublicChatbotConfig[] {
-  return chatbotDefinitions.map(toPublicChatbotConfig);
+  return staticChatbotDefinitions.map(toPublicChatbotConfig);
 }
 
 export function getChatbotDefinition(botId: string): ChatbotDefinition | null {
-  return chatbotDefinitions.find((chatbot) => chatbot.botId === botId) ?? null;
+  return (
+    staticChatbotDefinitions.find((chatbot) => chatbot.botId === botId) ?? null
+  );
 }
 
 export function getPublicChatbotConfig(botId: string): PublicChatbotConfig | null {
@@ -29,9 +33,23 @@ function toPublicChatbotConfig(
 ): PublicChatbotConfig {
   const {
     whatsappPhone: _whatsappPhone,
+    tracking: _tracking,
     formatWhatsAppMessage: _formatWhatsAppMessage,
     ...publicConfig
   } = chatbot;
 
-  return publicConfig;
+  return {
+    ...publicConfig,
+    integrationStatus: {
+      metaConfigured: Boolean(
+        chatbot.tracking.meta?.pixelId && chatbot.tracking.meta.accessToken,
+      ),
+      googleAnalyticsConfigured: Boolean(
+        chatbot.tracking.googleAnalytics?.measurementId &&
+          chatbot.tracking.googleAnalytics.apiSecret,
+      ),
+    },
+  };
 }
+
+export { toPublicChatbotConfig };

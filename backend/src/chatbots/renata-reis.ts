@@ -1,5 +1,6 @@
 import type { LeadSubmission } from "../leads/types.js";
 import type { ChatbotDefinition } from "./types.js";
+import { formatStandardWhatsAppMessage } from "./standard-flow.js";
 
 export const renataReisBotId = "dra-renata-reis";
 
@@ -11,6 +12,26 @@ export const renataReisChatbot: ChatbotDefinition = {
   status: "active",
   description: "Captação de leads para consultas e exames cardiológicos.",
   whatsappPhone: process.env.RENATA_REIS_WHATSAPP ?? "",
+  tracking: {
+    meta: {
+      pixelId:
+        process.env.RENATA_REIS_META_PIXEL_ID ?? process.env.META_PIXEL_ID,
+      accessToken:
+        process.env.RENATA_REIS_META_ACCESS_TOKEN ??
+        process.env.META_ACCESS_TOKEN,
+      testEventCode:
+        process.env.RENATA_REIS_META_TEST_EVENT_CODE ??
+        process.env.META_TEST_EVENT_CODE,
+    },
+    googleAnalytics: {
+      measurementId:
+        process.env.RENATA_REIS_GA4_MEASUREMENT_ID ??
+        process.env.GA4_MEASUREMENT_ID,
+      apiSecret:
+        process.env.RENATA_REIS_GA4_API_SECRET ??
+        process.env.GA4_API_SECRET,
+    },
+  },
   buttonTexts: [
     "Consultas e exames em um só lugar! Agende agora!",
     "Quer agendar uma consulta com a Dra. Renata Reis?",
@@ -46,19 +67,9 @@ export const renataReisChatbot: ChatbotDefinition = {
 };
 
 export function formatWhatsAppMessage(lead: LeadSubmission) {
-  if (lead.intent === "schedule_exam") {
-    const selectedExams = lead.selectedExams?.join(", ") ?? "";
-    const examAction =
-      lead.medicalRequestStatus === "Tenho dúvidas"
-        ? "Ainda tenho dúvidas"
-        : "Quero agendar exame";
-
-    return `Oi, meu nome é ${lead.name}. ${examAction}: ${selectedExams}. Possuo solicitação médica: ${lead.medicalRequestStatus}. Vim através do assistente de leads do site.`;
+  if (lead.intent === "severe_symptoms") {
+    return `Oi, meu nome é ${lead.name}. Preciso de avaliação de sintomas graves (pico de pressão alta ou dor no peito). Vim através do assistente de leads do site.`;
   }
 
-  if (lead.intent === "schedule_consultation") {
-    return `Oi, meu nome é ${lead.name}. ${lead.consultationDecision}. Minha principal necessidade é: ${lead.consultationNeed}. Vim através do assistente de leads do site.`;
-  }
-
-  return `Oi, meu nome é ${lead.name}. Preciso de avaliação de sintomas graves (pico de pressão alta ou dor no peito). Vim através do assistente de leads do site.`;
+  return formatStandardWhatsAppMessage(lead);
 }

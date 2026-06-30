@@ -35,11 +35,22 @@ type LeadResponse = {
   whatsappUrl: string;
 };
 
+type LeadSource = {
+  pageUrl?: string;
+  landingPageUrl?: string;
+  referrer?: string;
+  parentOrigin?: string;
+  utm?: Record<string, string>;
+  clickIds?: Record<string, string>;
+  cookies?: Record<string, string>;
+};
+
 type EmbeddedChatbotProps = {
   botId: string;
   clientId: string;
   pageUrl?: string;
   parentOrigin?: string;
+  initialSource: LeadSource;
 };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -57,6 +68,7 @@ const fallbackConfig: ChatbotConfig = {
 export function EmbeddedChatbot({
   botId,
   clientId,
+  initialSource,
   pageUrl,
   parentOrigin,
 }: EmbeddedChatbotProps) {
@@ -97,11 +109,15 @@ export function EmbeddedChatbot({
 
   const source = useMemo(
     () => ({
+      ...initialSource,
       pageUrl,
+      landingPageUrl: initialSource.landingPageUrl ?? pageUrl,
       parentOrigin,
-      referrer: typeof document === "undefined" ? undefined : document.referrer,
+      referrer:
+        initialSource.referrer ??
+        (typeof document === "undefined" ? undefined : document.referrer),
     }),
-    [pageUrl, parentOrigin],
+    [initialSource, pageUrl, parentOrigin],
   );
 
   async function submitLead(payload: {

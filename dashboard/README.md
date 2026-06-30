@@ -25,6 +25,18 @@ When running the dashboard on a non-default port, also set the widget origin use
 NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 NEXT_PUBLIC_WIDGET_BASE_URL=http://localhost:3002 npm run dev -- --port 3002
 ```
 
+## Chatbot Creation
+
+The home dashboard includes a creation form for dashboard-managed chatbots. It posts to the backend `POST /api/chatbots` endpoint and supports:
+
+- Bot and client identifiers.
+- WhatsApp destination.
+- Floating button text and flow option lists.
+- Meta Pixel ID, Meta access token, Meta test event code.
+- GA4 measurement ID and GA4 API secret.
+
+The backend returns only integration status flags to the dashboard. Meta access tokens and GA4 API secrets are not included in public chatbot configuration or widget snippets.
+
 ## Embed Snippet
 
 The client site can load a chatbot with:
@@ -39,6 +51,15 @@ The client site can load a chatbot with:
 ```
 
 The widget iframe lives at `/chatbots/[botId]/embed`. The script fetches public bot configuration from the backend, then injects the floating launcher and iframe.
+
+The widget automatically forwards attribution context to the backend:
+
+- UTM parameters.
+- `fbclid`, `gclid`, `gbraid`, `wbraid`, and `msclkid`.
+- Browser cookies `_fbp`, `_fbc`, and GA client ID from `_ga` when available.
+- Current page URL, first landing page URL for the browser session, referrer, and parent origin.
+
+Do not add Meta or GA4 secrets to this snippet. Server-side tracking credentials belong in the backend environment or in the dashboard-managed chatbot configuration.
 
 ## Validation
 

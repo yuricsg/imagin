@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 
 type LeadDto = {
   id: string;
@@ -14,8 +15,29 @@ type LeadDto = {
   consultationDecision: string | null;
   source: {
     pageUrl?: string;
+    landingPageUrl?: string;
     referrer?: string;
     parentOrigin?: string;
+    utm?: {
+      source?: string;
+      medium?: string;
+      campaign?: string;
+      content?: string;
+      term?: string;
+      id?: string;
+    };
+    clickIds?: {
+      fbclid?: string;
+      gclid?: string;
+      gbraid?: string;
+      wbraid?: string;
+      msclkid?: string;
+    };
+    cookies?: {
+      fbp?: string;
+      fbc?: string;
+      gaClientId?: string;
+    };
   };
   whatsappMessage: string;
   whatsappUrl: string;
@@ -31,11 +53,35 @@ type ChatbotDto = {
   status: "active" | "draft" | "archived";
   description: string;
   buttonTexts: string[];
+  integrationStatus: {
+    metaConfigured: boolean;
+    googleAnalyticsConfigured: boolean;
+  };
 };
 
 type DashboardData = {
   chatbots: ChatbotDto[];
   leads: LeadDto[];
+};
+
+type ChatbotFormState = {
+  botId: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  status: ChatbotDto["status"];
+  description: string;
+  whatsappPhone: string;
+  buttonTexts: string;
+  examOptions: string;
+  medicalRequestOptions: string;
+  consultationNeeds: string;
+  consultationDecisions: string;
+  metaPixelId: string;
+  metaAccessToken: string;
+  metaTestEventCode: string;
+  ga4MeasurementId: string;
+  ga4ApiSecret: string;
 };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -54,12 +100,37 @@ const statusLabels: Record<ChatbotDto["status"], string> = {
   archived: "Arquivado",
 };
 
+const initialFormState: ChatbotFormState = {
+  botId: "",
+  name: "",
+  clientId: "",
+  clientName: "",
+  status: "active",
+  description: "",
+  whatsappPhone: "",
+  buttonTexts: "Iniciar atendimento",
+  examOptions: "Exame",
+  medicalRequestOptions: "Sim\nNão\nTenho dúvidas",
+  consultationNeeds: "Avaliação\nAcompanhamento\nCheck-up\nSintomas\nOutro",
+  consultationDecisions:
+    "Quero agendar uma consulta\nTenho dúvidas\nNão tenho interesse no momento",
+  metaPixelId: "",
+  metaAccessToken: "",
+  metaTestEventCode: "",
+  ga4MeasurementId: "",
+  ga4ApiSecret: "",
+};
+
 export function DashboardHome() {
   const [chatbots, setChatbots] = useState<ChatbotDto[]>([]);
   const [leads, setLeads] = useState<LeadDto[]>([]);
   const [selectedBotId, setSelectedBotId] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [form, setForm] = useState<ChatbotFormState>(initialFormState);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
+  const [isCreatingChatbot, setIsCreatingChatbot] = useState(false);
 
   const selectedChatbot =
     chatbots.find((chatbot) => chatbot.botId === selectedBotId) ?? chatbots[0];
@@ -110,6 +181,82 @@ export function DashboardHome() {
       );
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function createChatbot(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCreateError("");
+    setCreateSuccess("");
+    setIsCreatingChatbot(true);
+
+    try {
+      const payload = {
+        botId: form.botId.trim(),
+        name: form.name.trim(),
+        clientId: form.clientId.trim(),
+        clientName: form.clientName.trim(),
+        status: form.status,
+        description: form.description.trim(),
+        whatsappPhone: form.whatsappPhone.trim(),
+        buttonTexts: splitLines(form.buttonTexts),
+        examOptions: splitLines(form.examOptions),
+        medicalRequestOptions: splitLines(form.medicalRequestOptions),
+        consultationNeeds: splitLines(form.consultationNeeds),
+        consultationDecisions: splitLines(form.consultationDecisions),
+        tracking: {
+          meta: {
+            pixelId: form.metaPixelId.trim(),
+            accessToken: form.metaAccessToken.trim(),
+            testEventCode: form.metaTestEventCode.trim(),
+          },
+          googleAnalytics: {
+            measurementId: form.ga4MeasurementId.trim(),
+            apiSecret: form.ga4ApiSecret.trim(),
+          },
+        },
+      };
+
+      const response = await fetch(`${apiBaseUrl}/api/chatbots`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json()) as {
+        chatbot?: ChatbotDto;
+        error?: string;
+        issues?: string[];
+      };
+
+      if (!response.ok || !body.chatbot) {
+        throw new Error(
+          body.issues?.join(", ") ??
+            body.error ??
+            `API de chatbots respondeu ${response.status}`,
+        );
+      }
+
+      const createdChatbot = body.chatbot;
+
+      setChatbots((currentChatbots) => [
+        ...currentChatbots.filter(
+          (chatbot) => chatbot.botId !== createdChatbot.botId,
+        ),
+        createdChatbot,
+      ]);
+      setSelectedBotId(createdChatbot.botId);
+      setCreateSuccess("Chatbot criado.");
+      setForm(initialFormState);
+    } catch (caughtError) {
+      setCreateError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Não foi possível criar o chatbot.",
+      );
+    } finally {
+      setIsCreatingChatbot(false);
     }
   }
 
@@ -221,11 +368,259 @@ export function DashboardHome() {
                         <span className="mt-1 block text-xs text-[#65738a]">
                           {chatbot.clientName} · {chatbotLeads} leads
                         </span>
+                        <span className="mt-2 flex flex-wrap gap-1">
+                          <IntegrationBadge
+                            label="Meta"
+                            active={chatbot.integrationStatus.metaConfigured}
+                          />
+                          <IntegrationBadge
+                            label="GA4"
+                            active={
+                              chatbot.integrationStatus.googleAnalyticsConfigured
+                            }
+                          />
+                        </span>
                       </button>
                     );
                   })}
                 </div>
               </div>
+            </section>
+
+            <section className="rounded-lg border border-[#d8dde7] bg-white p-4">
+              <h2 className="text-base font-semibold">Criar chatbot</h2>
+              <form className="mt-4 space-y-3" onSubmit={createChatbot}>
+                <TextField
+                  label="Nome do bot"
+                  value={form.name}
+                  required
+                  onChange={(value) =>
+                    setForm((currentForm) => {
+                      const currentSlug = slugify(currentForm.name);
+
+                      return {
+                        ...currentForm,
+                        name: value,
+                        botId:
+                          !currentForm.botId || currentForm.botId === currentSlug
+                            ? slugify(value)
+                            : currentForm.botId,
+                      };
+                    })
+                  }
+                />
+                <TextField
+                  label="Bot ID"
+                  value={form.botId}
+                  required
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      botId: slugify(value),
+                    }))
+                  }
+                />
+                <TextField
+                  label="Client ID"
+                  value={form.clientId}
+                  required
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      clientId: slugify(value),
+                    }))
+                  }
+                />
+                <TextField
+                  label="Cliente"
+                  value={form.clientName}
+                  required
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      clientName: value,
+                    }))
+                  }
+                />
+
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-[#414b5f]">
+                    Status
+                  </span>
+                  <select
+                    value={form.status}
+                    onChange={(event) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        status: event.target.value as ChatbotDto["status"],
+                      }))
+                    }
+                    className="h-10 w-full rounded-md border border-[#cfd6e4] bg-white px-3 text-sm outline-none transition focus:border-[#205ea8]"
+                  >
+                    <option value="active">Ativo</option>
+                    <option value="draft">Rascunho</option>
+                    <option value="archived">Arquivado</option>
+                  </select>
+                </label>
+
+                <TextField
+                  label="WhatsApp"
+                  value={form.whatsappPhone}
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      whatsappPhone: value,
+                    }))
+                  }
+                />
+                <TextareaField
+                  label="Descrição"
+                  value={form.description}
+                  rows={2}
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      description: value,
+                    }))
+                  }
+                />
+                <TextareaField
+                  label="Botões flutuantes"
+                  value={form.buttonTexts}
+                  rows={3}
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      buttonTexts: value,
+                    }))
+                  }
+                />
+                <TextareaField
+                  label="Exames"
+                  value={form.examOptions}
+                  rows={4}
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      examOptions: value,
+                    }))
+                  }
+                />
+                <TextareaField
+                  label="Solicitação médica"
+                  value={form.medicalRequestOptions}
+                  rows={3}
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      medicalRequestOptions: value,
+                    }))
+                  }
+                />
+                <TextareaField
+                  label="Necessidades de consulta"
+                  value={form.consultationNeeds}
+                  rows={4}
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      consultationNeeds: value,
+                    }))
+                  }
+                />
+                <TextareaField
+                  label="Decisão de consulta"
+                  value={form.consultationDecisions}
+                  rows={3}
+                  onChange={(value) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      consultationDecisions: value,
+                    }))
+                  }
+                />
+
+                <div className="border-t border-[#e4e8f0] pt-3">
+                  <h3 className="text-sm font-semibold text-[#202636]">
+                    Integrações
+                  </h3>
+                  <div className="mt-3 space-y-3">
+                    <TextField
+                      label="Meta Pixel ID"
+                      value={form.metaPixelId}
+                      onChange={(value) =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          metaPixelId: value,
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="Meta Access Token"
+                      value={form.metaAccessToken}
+                      type="password"
+                      autoComplete="off"
+                      onChange={(value) =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          metaAccessToken: value,
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="Meta Test Event Code"
+                      value={form.metaTestEventCode}
+                      onChange={(value) =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          metaTestEventCode: value,
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="GA4 Measurement ID"
+                      value={form.ga4MeasurementId}
+                      onChange={(value) =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          ga4MeasurementId: value,
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="GA4 API Secret"
+                      value={form.ga4ApiSecret}
+                      type="password"
+                      autoComplete="off"
+                      onChange={(value) =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          ga4ApiSecret: value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {createError ? (
+                  <p className="rounded-md bg-[#fff3f3] px-3 py-2 text-sm text-[#9a1f1f]">
+                    {createError}
+                  </p>
+                ) : null}
+                {createSuccess ? (
+                  <p className="rounded-md bg-[#eef9f0] px-3 py-2 text-sm text-[#1f6b35]">
+                    {createSuccess}
+                  </p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={isCreatingChatbot}
+                  className="h-10 w-full rounded-md bg-[#205ea8] px-4 text-sm font-medium text-white transition hover:bg-[#184d8a] disabled:cursor-not-allowed disabled:bg-[#a9b7cc]"
+                >
+                  {isCreatingChatbot ? "Criando..." : "Criar chatbot"}
+                </button>
+              </form>
             </section>
 
             <section className="rounded-lg border border-[#d8dde7] bg-white p-4">
@@ -338,9 +733,7 @@ export function DashboardHome() {
                               : lead.consultationNeed ?? lead.whatsappMessage}
                           </td>
                           <td className="max-w-[140px] px-4 py-3 text-xs text-[#647084]">
-                            {lead.source.parentOrigin ??
-                              lead.source.pageUrl ??
-                              "Não informado"}
+                            {formatLeadSource(lead.source)}
                           </td>
                           <td className="px-4 py-3 text-[#647084]">
                             {formatDate(lead.createdAt)}
@@ -365,6 +758,78 @@ function Metric({ label, value }: { label: string; value: number }) {
       <p className="text-sm text-[#647084]">{label}</p>
       <p className="mt-2 text-3xl font-semibold">{value}</p>
     </div>
+  );
+}
+
+function IntegrationBadge({
+  active,
+  label,
+}: {
+  active: boolean;
+  label: string;
+}) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        active ? "bg-[#e5f7ec] text-[#1f6b35]" : "bg-[#f0f3f8] text-[#65738a]"
+      }`}
+    >
+      {label} {active ? "on" : "off"}
+    </span>
+  );
+}
+
+function TextField({
+  autoComplete,
+  label,
+  onChange,
+  required,
+  type = "text",
+  value,
+}: {
+  autoComplete?: string;
+  label: string;
+  onChange(value: string): void;
+  required?: boolean;
+  type?: "password" | "text";
+  value: string;
+}) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block font-medium text-[#414b5f]">{label}</span>
+      <input
+        autoComplete={autoComplete}
+        required={required}
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 w-full rounded-md border border-[#cfd6e4] bg-white px-3 text-sm outline-none transition focus:border-[#205ea8]"
+      />
+    </label>
+  );
+}
+
+function TextareaField({
+  label,
+  onChange,
+  rows,
+  value,
+}: {
+  label: string;
+  onChange(value: string): void;
+  rows: number;
+  value: string;
+}) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block font-medium text-[#414b5f]">{label}</span>
+      <textarea
+        rows={rows}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full resize-y rounded-md border border-[#cfd6e4] bg-white px-3 py-2 text-sm outline-none transition focus:border-[#205ea8]"
+      />
+    </label>
   );
 }
 
@@ -398,4 +863,38 @@ async function fetchDashboardData(): Promise<DashboardData> {
     chatbots: chatbotsBody.chatbots,
     leads: leadsBody.leads,
   };
+}
+
+function formatLeadSource(source: LeadDto["source"]) {
+  if (source.utm?.source) {
+    return [source.utm.source, source.utm.medium, source.utm.campaign]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
+  if (source.clickIds?.gclid || source.clickIds?.gbraid || source.clickIds?.wbraid) {
+    return "Google Ads";
+  }
+
+  if (source.clickIds?.fbclid || source.cookies?.fbc || source.cookies?.fbp) {
+    return "Meta Ads";
+  }
+
+  return source.referrer ?? source.parentOrigin ?? source.pageUrl ?? "Direto";
+}
+
+function splitLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }

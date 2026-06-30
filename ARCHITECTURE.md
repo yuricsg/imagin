@@ -11,8 +11,10 @@ The repository currently contains a Next.js dashboard in `dashboard/` and a Hono
 - Dashboard: lead overview implemented on `/`.
 - Widget: static loader implemented at `/embed/widget.js`.
 - Chatbot iframe: implemented at `/chatbots/[botId]/embed`.
-- Chatbot registry: implemented in `backend/src/chatbots/catalog.ts`.
-- Persistence: local JSON file storage in `backend/data/leads.json`.
+- Chatbot registry: static defaults in `backend/src/chatbots/catalog.ts` plus custom bots created through the dashboard.
+- Persistence: local JSON file storage in `backend/data/leads.json` and `backend/data/chatbots.json`.
+- Attribution: widget captures UTM parameters, click IDs, referrer, page URL, landing page URL, `_fbp`, `_fbc`, and GA client ID from `_ga`.
+- Tracking dispatch: backend can send Meta Conversions API and GA4 Measurement Protocol events after lead creation.
 - Authentication: not configured.
 - Multi-client model: `botId` and `clientId` are accepted, stored, listed, and filterable, but there is no authenticated organization/client model yet.
 
@@ -77,11 +79,15 @@ Public widget routes:
 - `GET /chatbots/[botId]/embed`: iframe UI route.
 - `GET /api/public/chatbots/[botId]/config`: public-safe bot configuration on the Hono backend.
 - `POST /api/public/chatbots/[botId]/leads`: creates lead records on the Hono backend.
+- Optional tracking side effects from the lead endpoint:
+  - Meta Conversions API `Lead` event.
+  - GA4 Measurement Protocol `generate_lead` event.
 
 Dashboard routes:
 
 - `GET /`: lead overview.
 - `GET /api/chatbots`: configured chatbot catalog on the Hono backend.
+- `POST /api/chatbots`: creates a dashboard-managed chatbot with private tracking credentials stored server-side.
 - `GET /api/leads`: lead list on the Hono backend.
 - `GET /api/leads?botId=[botId]`: bot-scoped lead list.
 - `GET /api/leads?clientId=[clientId]`: client-scoped lead list.
@@ -129,8 +135,29 @@ For the Dra. Renata Reis flow, the structured lead payload currently includes:
   "consultationDecision": "Quero agendar uma consulta | Tenho dúvidas | Não tenho interesse no momento",
   "source": {
     "pageUrl": "string",
+    "landingPageUrl": "string",
     "referrer": "string",
-    "parentOrigin": "string"
+    "parentOrigin": "string",
+    "utm": {
+      "source": "string",
+      "medium": "string",
+      "campaign": "string",
+      "content": "string",
+      "term": "string",
+      "id": "string"
+    },
+    "clickIds": {
+      "fbclid": "string",
+      "gclid": "string",
+      "gbraid": "string",
+      "wbraid": "string",
+      "msclkid": "string"
+    },
+    "cookies": {
+      "fbp": "string",
+      "fbc": "string",
+      "gaClientId": "string"
+    }
   }
 }
 ```
@@ -148,6 +175,9 @@ For the Dra. Renata Reis flow, the structured lead payload currently includes:
 - Set Content Security Policy headers deliberately for embed pages.
 - Validate every `postMessage` sender origin and message shape.
 - Keep personally identifiable information out of browser logs and analytics payloads.
+- Do not send lead names to Meta/GA4 payloads unless a future consent and hashing policy explicitly requires it.
+- Keep Meta access tokens and GA4 API secrets server-side only.
+- The MVP stores dashboard-managed bot secrets in local JSON for development only. Production storage must move these values to an encrypted database column or a secret manager.
 
 ## MVP Implementation Order
 
@@ -159,8 +189,10 @@ For the Dra. Renata Reis flow, the structured lead payload currently includes:
 6. Done for MVP: add public lead APIs.
 7. Done for MVP: add dashboard lead list.
 8. Done for MVP: add multi-chatbot catalog, bot cards, selected embed snippet, and bot/client filtering.
-9. Next: add production persistence with schema and migrations.
-10. Next: add tests for remaining critical flows:
+9. Done: capture lead attribution context and add optional Meta/GA4 server-side event dispatch.
+10. Done for MVP: add dashboard chatbot creation with per-bot Meta and GA4 credential fields.
+11. Next: add production persistence with schema and migrations.
+12. Next: add tests for remaining critical flows:
    - session creation
    - consultation lead API submission
    - severe symptom handoff
@@ -183,5 +215,5 @@ Before production use:
 - Database provider.
 - Authentication provider for the dashboard.
 - WhatsApp destination per bot or per client.
-- Whether the dashboard will support visual bot editing in the first release or start with code/config-defined flows.
+- How far the dashboard editor should go beyond the current configuration form.
 - Whether conversations require real-time updates or simple request/response persistence is enough for MVP.

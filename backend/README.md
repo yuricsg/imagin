@@ -13,26 +13,76 @@ Default URL: `http://localhost:4000`.
 
 - `GET /health` returns API health.
 - `GET /api/chatbots` lists configured chatbots for the dashboard.
+- `POST /api/chatbots` creates a dashboard-managed chatbot.
 - `GET /api/public/chatbots/dra-renata-reis/config` returns public chatbot configuration.
 - `POST /api/public/chatbots/dra-renata-reis/leads` stores one lead submission and returns the WhatsApp handoff message.
 - `GET /api/leads` lists captured leads for the dashboard MVP.
 - `GET /api/leads?botId=dra-renata-reis` filters leads by chatbot.
 - `GET /api/leads?clientId=clinica-renata` filters leads by client.
 
+## Attribution And Tracking
+
+The widget sends attribution data with each lead:
+
+- Page URL and landing page URL.
+- Referrer and parent origin.
+- UTM parameters.
+- Click IDs: `fbclid`, `gclid`, `gbraid`, `wbraid`, `msclkid`.
+- Browser cookies used for server-side attribution: `_fbp`, `_fbc`, and GA client ID parsed from `_ga`.
+
+When configured, the backend sends a non-blocking server-side lead event to:
+
+- Meta Conversions API with `event_name=Lead`.
+- Google Analytics 4 Measurement Protocol with `event=generate_lead`.
+
+Provider failures do not block lead creation.
+
+## Tracking Environment Variables
+
+Use per-bot env vars when possible:
+
+```bash
+RENATA_REIS_META_PIXEL_ID=
+RENATA_REIS_META_ACCESS_TOKEN=
+RENATA_REIS_META_TEST_EVENT_CODE=
+RENATA_REIS_GA4_MEASUREMENT_ID=
+RENATA_REIS_GA4_API_SECRET=
+```
+
+Shared fallback vars are also supported:
+
+```bash
+META_PIXEL_ID=
+META_ACCESS_TOKEN=
+META_TEST_EVENT_CODE=
+META_GRAPH_API_VERSION=v25.0
+GA4_MEASUREMENT_ID=
+GA4_API_SECRET=
+```
+
+The dashboard creation form can also save per-bot Meta and GA4 credentials. These values are accepted by `POST /api/chatbots`, stored server-side, and only exposed back to the dashboard/widget as boolean integration status.
+
+Never expose access tokens or API secrets in the widget snippet or public chatbot config.
+
 ## Chatbot Catalog
 
-Configured bots are registered in `src/chatbots/catalog.ts`. Each bot implements the shared `ChatbotDefinition` contract from `src/chatbots/types.ts`.
+Static bots are registered in `src/chatbots/catalog.ts`. Dashboard-managed bots are stored through `src/chatbots/file-chatbot-repository.ts`. Each bot implements the shared `ChatbotDefinition` contract from `src/chatbots/types.ts`.
 
-To add another bot:
+To add another code-defined bot:
 
 1. Create a new file in `src/chatbots/`.
 2. Export a `ChatbotDefinition`.
-3. Add it to the `chatbotDefinitions` array in `src/chatbots/catalog.ts`.
-4. Add or update tests for config exposure, validation rules, and WhatsApp message formatting.
+3. Add it to the `staticChatbotDefinitions` array in `src/chatbots/catalog.ts`.
+4. Configure server-side tracking credentials on the bot definition.
+5. Add or update tests for config exposure, validation rules, WhatsApp message formatting, and tracking payloads.
+
+To add a dashboard-managed bot, use `POST /api/chatbots` or the dashboard form. The API requires bot/client identifiers, flow option lists, WhatsApp destination, and optional `tracking.meta` / `tracking.googleAnalytics` credentials.
 
 ## Local Persistence
 
-Until the production database provider is chosen, leads are stored in `data/leads.json`. The directory is ignored by git and is only intended for local MVP validation.
+Until the production database provider is chosen, leads are stored in `data/leads.json` and dashboard-managed chatbots are stored in `data/chatbots.json`. Override the bot file with `CHATBOTS_FILE_PATH`.
+
+The directory is ignored by git and is only intended for local MVP validation. Production must move bot configs and tracking secrets to durable storage with encryption or a secret manager.
 
 ## Validation
 
