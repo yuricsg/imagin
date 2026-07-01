@@ -1,4 +1,5 @@
 import { buildWhatsAppUrl } from "../chatbots/catalog.js";
+import { isConversationIntentAllowed } from "../chatbots/conversation-flows.js";
 import type { ChatbotDefinition } from "../chatbots/types.js";
 import type {
   CreateLeadRecordInput,
@@ -31,6 +32,10 @@ export function validateLeadSubmission(
   const name = readRequiredString(rawBody, "name", issues);
   const intent = readIntent(rawBody.intent, issues);
   const source = readSource(rawBody.source);
+
+  if (!isConversationIntentAllowed(chatbot.flowKey, intent)) {
+    issues.push("intent is not enabled for this chatbot flow");
+  }
 
   const submission: LeadSubmission = {
     botId,

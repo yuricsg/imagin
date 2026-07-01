@@ -3,6 +3,7 @@ import {
   staticChatbotDefinitions,
   toPublicChatbotConfig,
 } from "./catalog.js";
+import { getConversationFlow } from "./conversation-flows.js";
 import {
   defaultButtonTexts,
   defaultConsultationDecisions,
@@ -53,6 +54,7 @@ export class PrismaChatbotRepository implements ChatbotRepository {
         clientId: input.clientId,
         clientName: input.clientName,
         status: normalizeStatus(input.status),
+        flowKey: getConversationFlow(input.flowKey).key,
         description: input.description ?? "",
         whatsappPhone: input.whatsappPhone ?? "",
         buttonTexts: normalizeList(input.buttonTexts, defaultButtonTexts),
@@ -79,6 +81,7 @@ function toChatbotDefinition(row: Awaited<ReturnType<PrismaClient["bot"]["create
     clientId: row.clientId,
     clientName: row.clientName,
     status: row.status as ChatbotDefinition["status"],
+    flowKey: getConversationFlow(row.flowKey).key,
     description: row.description,
     whatsappPhone: row.whatsappPhone,
     tracking: {

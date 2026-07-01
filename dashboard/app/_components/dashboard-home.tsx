@@ -1,16 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
-  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis,
 } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,13 +38,100 @@ type ChatbotDto = {
   clientId: string;
   clientName: string;
   status: "active" | "draft" | "archived";
+  flowKey: ConversationFlowKey;
+  conversationFlow?: ConversationFlowOption;
   description: string;
   integrationStatus: { metaConfigured: boolean; googleAnalyticsConfigured: boolean };
+};
+
+type ConversationFlowKey =
+  | "cardiology_exam_consultation"
+  | "exam_scheduling"
+  | "consultation_scheduling"
+  | "urgent_triage";
+
+type ConversationFlowOption = {
+  key: ConversationFlowKey;
+  label: string;
+  description: string;
+  intents: LeadDto["intent"][];
+};
+
+type ChatbotFormState = {
+  botId: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  status: ChatbotDto["status"];
+  flowKey: ConversationFlowKey;
+  description: string;
+  whatsappPhone: string;
+  buttonTexts: string;
+  examOptions: string;
+  medicalRequestOptions: string;
+  consultationNeeds: string;
+  consultationDecisions: string;
+  metaPixelId: string;
+  metaAccessToken: string;
+  metaTestEventCode: string;
+  ga4MeasurementId: string;
+  ga4ApiSecret: string;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+
+const FLOW_OPTIONS: ConversationFlowOption[] = [
+  {
+    key: "cardiology_exam_consultation",
+    label: "Consulta + exames cardiologicos",
+    description:
+      "Mostra exames, consulta cardiologica e triagem de sintomas graves.",
+    intents: ["schedule_exam", "schedule_consultation", "severe_symptoms"],
+  },
+  {
+    key: "exam_scheduling",
+    label: "Agendamento de exames",
+    description: "Mostra apenas selecao de exames e solicitacao medica.",
+    intents: ["schedule_exam"],
+  },
+  {
+    key: "consultation_scheduling",
+    label: "Agendamento de consulta",
+    description:
+      "Mostra necessidade da consulta, investimento, endereco e decisao de agenda.",
+    intents: ["schedule_consultation"],
+  },
+  {
+    key: "urgent_triage",
+    label: "Triagem urgente",
+    description: "Mostra apenas o caminho direto para atendimento humano.",
+    intents: ["severe_symptoms"],
+  },
+];
+
+const initialFormState: ChatbotFormState = {
+  botId: "",
+  name: "",
+  clientId: "",
+  clientName: "",
+  status: "active",
+  flowKey: "cardiology_exam_consultation",
+  description: "",
+  whatsappPhone: "",
+  buttonTexts: "Iniciar atendimento",
+  examOptions: "Exame",
+  medicalRequestOptions: "Sim\nNão\nTenho dúvidas",
+  consultationNeeds: "Avaliação\nAcompanhamento\nCheck-up\nSintomas\nOutro",
+  consultationDecisions:
+    "Quero agendar uma consulta\nTenho dúvidas\nNão tenho interesse no momento",
+  metaPixelId: "",
+  metaAccessToken: "",
+  metaTestEventCode: "",
+  ga4MeasurementId: "",
+  ga4ApiSecret: "",
+};
 
 const BOT_COLORS = [
   { bg: "from-indigo-500 to-indigo-700", dot: "#6366f1" },
@@ -122,22 +206,105 @@ export function DashboardHome() {
   const [selectedBotId, setSelectedBotId] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [showNewBot, setShowNewBot] = useState(false);
+  const [form, setForm] = useState<ChatbotFormState>(initialFormState);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
+  const [isCreatingChatbot, setIsCreatingChatbot] = useState(false);
 
   useEffect(() => {
-    async function load() {
+    let isMounted = true;
+
+    async function loadDashboardData() {
       try {
         const [cb, ld] = await Promise.all([
           fetch(`${apiBaseUrl}/api/chatbots`, { cache: "no-store" }).then((r) => r.json()),
           fetch(`${apiBaseUrl}/api/leads`, { cache: "no-store" }).then((r) => r.json()),
         ]);
-        setChatbots(cb.chatbots ?? []);
-        setLeads(ld.leads ?? []);
+
+        if (isMounted) {
+          setChatbots(cb.chatbots ?? []);
+          setLeads(ld.leads ?? []);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
-    void load();
+
+    void loadDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  async function createChatbot(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCreateError("");
+    setCreateSuccess("");
+    setIsCreatingChatbot(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/chatbots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          botId: form.botId.trim(),
+          name: form.name.trim(),
+          clientId: form.clientId.trim(),
+          clientName: form.clientName.trim(),
+          status: form.status,
+          flowKey: form.flowKey,
+          description: form.description.trim(),
+          whatsappPhone: form.whatsappPhone.trim(),
+          buttonTexts: splitLines(form.buttonTexts),
+          examOptions: splitLines(form.examOptions),
+          medicalRequestOptions: splitLines(form.medicalRequestOptions),
+          consultationNeeds: splitLines(form.consultationNeeds),
+          consultationDecisions: splitLines(form.consultationDecisions),
+          tracking: {
+            meta: {
+              pixelId: form.metaPixelId.trim(),
+              accessToken: form.metaAccessToken.trim(),
+              testEventCode: form.metaTestEventCode.trim(),
+            },
+            googleAnalytics: {
+              measurementId: form.ga4MeasurementId.trim(),
+              apiSecret: form.ga4ApiSecret.trim(),
+            },
+          },
+        }),
+      });
+      const body = (await response.json()) as {
+        chatbot?: ChatbotDto;
+        error?: string;
+        issues?: string[];
+      };
+
+      if (!response.ok || !body.chatbot) {
+        throw new Error(
+          body.issues?.join(", ") ??
+            body.error ??
+            `API de chatbots respondeu ${response.status}`,
+        );
+      }
+
+      setChatbots((current) => [...current, body.chatbot!]);
+      setSelectedBotId(body.chatbot.botId);
+      setCreateSuccess("Chatbot criado e pronto para receber leads.");
+      setForm(initialFormState);
+      setShowNewBot(false);
+    } catch (caughtError) {
+      setCreateError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Não foi possível criar o chatbot.",
+      );
+    } finally {
+      setIsCreatingChatbot(false);
+    }
+  }
 
   const filteredLeads = useMemo(
     () => (selectedBotId === "all" ? leads : leads.filter((l) => l.botId === selectedBotId)),
@@ -163,9 +330,9 @@ export function DashboardHome() {
       : (botMap.get(selectedBotId)?.clientName ?? "");
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0d0f14] text-white">
+    <div className="flex min-h-screen flex-col bg-[#0d0f14] text-white lg:flex-row">
       {/* ── Sidebar ── */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-[#1e2130] bg-[#0d0f14]">
+      <aside className="flex w-full shrink-0 flex-col border-b border-[#1e2130] bg-[#0d0f14] lg:h-screen lg:w-60 lg:border-b-0 lg:border-r">
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 py-5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
@@ -201,11 +368,11 @@ export function DashboardHome() {
         </nav>
 
         {/* Chatbots */}
-        <div className="mt-5 px-3">
+        <div className="mt-4 px-3 pb-4 lg:mt-5 lg:pb-0">
           <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5563]">
             Chatbots
           </p>
-          <div className="space-y-0.5">
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
             {chatbots.map((bot, i) => {
               const color = BOT_COLORS[i % BOT_COLORS.length];
               const botLeads = leads.filter((l) => l.botId === bot.botId).length;
@@ -215,7 +382,7 @@ export function DashboardHome() {
                   key={bot.botId}
                   type="button"
                   onClick={() => setSelectedBotId(bot.botId)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition ${
+                  className={`flex min-w-56 items-center gap-3 rounded-lg px-3 py-2 text-left transition lg:min-w-0 lg:w-full ${
                     isActive ? "bg-[#1a1d27]" : "hover:bg-[#1a1d27]"
                   }`}
                 >
@@ -229,6 +396,13 @@ export function DashboardHome() {
                       {bot.name}
                     </p>
                     <p className="truncate text-[10px] text-[#6b7280]">{bot.description || bot.clientName}</p>
+                    <p className="truncate text-[10px] text-[#818cf8]">
+                      {bot.conversationFlow?.label ?? flowLabel(bot.flowKey)}
+                    </p>
+                    <div className="mt-1 flex gap-1">
+                      <IntegrationPill active={bot.integrationStatus.metaConfigured} label="Meta" />
+                      <IntegrationPill active={bot.integrationStatus.googleAnalyticsConfigured} label="GA4" />
+                    </div>
                   </div>
                   <span className="shrink-0 text-[10px] font-medium text-[#6b7280]">
                     {botLeads >= 1000 ? `${(botLeads / 1000).toFixed(1)}k` : botLeads}
@@ -240,7 +414,7 @@ export function DashboardHome() {
         </div>
 
         {/* Footer */}
-        <div className="mt-auto border-t border-[#1e2130] px-4 py-4">
+        <div className="mt-auto hidden border-t border-[#1e2130] px-4 py-4 lg:block">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-[10px] font-bold text-white">
               DA
@@ -254,14 +428,14 @@ export function DashboardHome() {
       </aside>
 
       {/* ── Main ── */}
-      <div className="flex flex-1 flex-col overflow-y-auto">
+      <div className="flex min-w-0 flex-1 flex-col lg:h-screen lg:overflow-y-auto">
         {/* Topbar */}
-        <div className="flex shrink-0 items-center justify-between border-b border-[#1e2130] px-8 py-4">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-[#1e2130] px-4 py-4 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <div>
             <h1 className="text-xl font-bold">{title}</h1>
             <p className="text-sm text-[#6b7280]">{subtitle}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               className="flex items-center gap-2 rounded-lg border border-[#252836] bg-[#171923] px-3 py-2 text-sm text-[#9ca3af] transition hover:border-[#374151]"
@@ -283,7 +457,7 @@ export function DashboardHome() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 px-8 py-6 space-y-6">
+        <div className="flex-1 space-y-6 px-4 py-5 lg:px-8 lg:py-6">
           {isLoading ? (
             <div className="flex h-64 items-center justify-center text-[#4b5563]">
               Carregando dados...
@@ -291,7 +465,7 @@ export function DashboardHome() {
           ) : (
             <>
               {/* ── Metric cards ── */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
                   label="Total de leads"
                   value={filteredLeads.length.toLocaleString("pt-BR")}
@@ -327,7 +501,7 @@ export function DashboardHome() {
               </div>
 
               {/* ── Area chart + Services ── */}
-              <div className="grid grid-cols-[1fr_340px] gap-4">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
                 <Card>
                   <div className="mb-4 flex items-start justify-between">
                     <div>
@@ -367,7 +541,7 @@ export function DashboardHome() {
                     <div className="space-y-3">
                       {services.map(({ name, count }) => (
                         <div key={name} className="flex items-center gap-3">
-                          <span className="w-32 truncate text-xs text-[#9ca3af]">{name}</span>
+                          <span className="w-28 truncate text-xs text-[#9ca3af] sm:w-32">{name}</span>
                           <div className="flex-1 rounded-full bg-[#1e2130]">
                             <div
                               className="h-2 rounded-full bg-cyan-400 transition-all"
@@ -383,7 +557,7 @@ export function DashboardHome() {
               </div>
 
               {/* ── Abandonment + Funnel ── */}
-              <div className="grid grid-cols-[1fr_300px] gap-4">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
                 <Card>
                   <p className="mb-1 font-semibold">Para onde vão as conversas · por chatbot</p>
                   <p className="mb-5 text-xs text-[#6b7280]">Quem concluiu vs. onde abandonaram</p>
@@ -392,12 +566,13 @@ export function DashboardHome() {
                       .filter((b) => selectedBotId === "all" || b.botId === selectedBotId)
                       .map((bot) => {
                         const botLeads = leads.filter((l) => l.botId === bot.botId);
-                        const total = botLeads.length || 1;
+                        const totalLeads = botLeads.length;
+                        const totalForPercent = Math.max(totalLeads, 1);
                         const concluded = botLeads.filter(
                           (l) => l.consultationDecision || l.medicalRequestStatus,
                         ).length;
-                        const rest = total - concluded;
-                        const endPct = Math.round((concluded / total) * 100);
+                        const rest = totalLeads - concluded;
+                        const endPct = Math.round((concluded / totalForPercent) * 100);
                         const midPct = Math.round((rest * 0.4));
                         const startPct = rest - midPct;
                         return (
@@ -407,14 +582,18 @@ export function DashboardHome() {
                                 <p className="text-sm font-semibold">{bot.name}</p>
                                 <p className="text-xs text-[#6b7280]">{bot.description || bot.clientName}</p>
                               </div>
-                              <span className="text-sm text-[#6b7280]">{total} conversas</span>
+                              <span className="text-sm text-[#6b7280]">{totalLeads} conversas</span>
                             </div>
-                            <div className="flex h-3 overflow-hidden rounded-full">
-                              <div className="bg-emerald-500 transition-all" style={{ width: `${endPct}%` }} />
-                              <div className="bg-amber-400 transition-all" style={{ width: `${Math.round((midPct / total) * 100)}%` }} />
-                              <div className="bg-orange-500 transition-all" style={{ width: `${Math.round((startPct / total) * 100)}%` }} />
-                              <div className="flex-1 bg-rose-500" />
-                            </div>
+                            {totalLeads === 0 ? (
+                              <div className="h-3 rounded-full bg-[#1e2130]" />
+                            ) : (
+                              <div className="flex h-3 overflow-hidden rounded-full">
+                                <div className="bg-emerald-500 transition-all" style={{ width: `${endPct}%` }} />
+                                <div className="bg-amber-400 transition-all" style={{ width: `${Math.round((midPct / totalForPercent) * 100)}%` }} />
+                                <div className="bg-orange-500 transition-all" style={{ width: `${Math.round((startPct / totalForPercent) * 100)}%` }} />
+                                <div className="flex-1 bg-rose-500" />
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -469,7 +648,7 @@ export function DashboardHome() {
                     return (
                       <div
                         key={lead.id}
-                        className="flex items-center gap-4 rounded-xl border border-[#1e2130] bg-[#12141a] px-4 py-3"
+                        className="flex flex-col gap-3 rounded-xl border border-[#1e2130] bg-[#12141a] px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
                       >
                         {/* Avatar */}
                         <div
@@ -480,7 +659,7 @@ export function DashboardHome() {
                           {initials(lead.name)}
                         </div>
                         {/* Name */}
-                        <div className="w-36 shrink-0">
+                        <div className="w-full shrink-0 sm:w-36">
                           <p className="text-sm font-semibold">{lead.name}</p>
                           <p className="text-xs text-[#6b7280]">{lead.clientId}</p>
                         </div>
@@ -517,7 +696,7 @@ export function DashboardHome() {
                           </span>
                         </div>
                         {/* Time */}
-                        <span className="w-14 shrink-0 text-right text-xs text-[#4b5563]">
+                        <span className="w-full shrink-0 text-left text-xs text-[#4b5563] sm:w-14 sm:text-right">
                           {timeAgo(lead.createdAt)}
                         </span>
                       </div>
@@ -533,25 +712,279 @@ export function DashboardHome() {
         </div>
       </div>
 
-      {/* ── New bot modal (placeholder) ── */}
+      {/* ── New bot modal ── */}
       {showNewBot && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
           onClick={() => setShowNewBot(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-[#252836] bg-[#171923] p-6"
+            className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-[#252836] bg-[#171923] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="mb-1 text-lg font-bold">Novo chatbot</p>
-            <p className="mb-4 text-sm text-[#6b7280]">Em breve disponível nesta interface.</p>
-            <button
-              type="button"
-              onClick={() => setShowNewBot(false)}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-            >
-              Fechar
-            </button>
+            <div className="flex items-start justify-between border-b border-[#252836] px-6 py-5">
+              <div>
+                <p className="text-lg font-bold">Novo chatbot</p>
+                <p className="text-sm text-[#6b7280]">
+                  Configure o bot, escolha o fluxo e salve as integrações do cliente.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewBot(false)}
+                className="rounded-lg border border-[#252836] px-3 py-1.5 text-sm text-[#9ca3af] hover:border-[#374151] hover:text-white"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form className="max-h-[calc(92vh-88px)] overflow-y-auto px-6 py-5" onSubmit={createChatbot}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextField
+                  label="Nome do chatbot"
+                  hint="Nome visível no dashboard e no topo do atendimento."
+                  value={form.name}
+                  required
+                  onChange={(value) =>
+                    setForm((current) => {
+                      const currentSlug = slugify(current.name);
+
+                      return {
+                        ...current,
+                        name: value,
+                        botId:
+                          !current.botId || current.botId === currentSlug
+                            ? slugify(value)
+                            : current.botId,
+                      };
+                    })
+                  }
+                />
+                <TextField
+                  label="ID do chatbot"
+                  hint="Slug usado no embed e na API. Use letras minusculas, numeros e hifen."
+                  value={form.botId}
+                  required
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, botId: slugify(value) }))
+                  }
+                />
+                <TextField
+                  label="ID do cliente"
+                  hint="Identificador interno para filtrar leads de um cliente/site."
+                  value={form.clientId}
+                  required
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, clientId: slugify(value) }))
+                  }
+                />
+                <TextField
+                  label="Nome do cliente"
+                  hint="Nome comercial do cliente que aparecera no dashboard."
+                  value={form.clientName}
+                  required
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, clientName: value }))
+                  }
+                />
+                <label className="block text-sm">
+                  <span className="mb-1 block font-semibold text-[#d1d5db]">Fluxo de conversa</span>
+                  <select
+                    value={form.flowKey}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        flowKey: event.target.value as ConversationFlowKey,
+                      }))
+                    }
+                    className="h-10 w-full rounded-lg border border-[#303445] bg-[#0f1117] px-3 text-sm text-white outline-none transition focus:border-indigo-500"
+                  >
+                    {FLOW_OPTIONS.map((flow) => (
+                      <option key={flow.key} value={flow.key}>
+                        {flow.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs leading-5 text-[#6b7280]">
+                    {FLOW_OPTIONS.find((flow) => flow.key === form.flowKey)?.description}
+                  </span>
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block font-semibold text-[#d1d5db]">Status</span>
+                  <select
+                    value={form.status}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        status: event.target.value as ChatbotDto["status"],
+                      }))
+                    }
+                    className="h-10 w-full rounded-lg border border-[#303445] bg-[#0f1117] px-3 text-sm text-white outline-none transition focus:border-indigo-500"
+                  >
+                    <option value="active">Ativo</option>
+                    <option value="draft">Rascunho</option>
+                    <option value="archived">Arquivado</option>
+                  </select>
+                  <span className="mt-1 block text-xs leading-5 text-[#6b7280]">
+                    Use rascunho para preparar um bot antes de entregar o snippet ao cliente.
+                  </span>
+                </label>
+                <TextField
+                  label="WhatsApp de destino"
+                  hint="Numero da secretaria em formato internacional, sem +. Ex.: 5587999999999."
+                  value={form.whatsappPhone}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, whatsappPhone: value }))
+                  }
+                />
+                <TextareaField
+                  label="Descricao interna"
+                  hint="Resumo do objetivo do bot. Ajuda a equipe a reconhecer o projeto."
+                  value={form.description}
+                  rows={3}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, description: value }))
+                  }
+                />
+              </div>
+
+              <SectionTitle
+                title="Textos e opcoes"
+                subtitle="Uma opcao por linha. O fluxo escolhido decide quais listas serao usadas."
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextareaField
+                  label="Textos do botao flutuante"
+                  hint="Frases que alternam no botao instalado no site do cliente."
+                  value={form.buttonTexts}
+                  rows={4}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, buttonTexts: value }))
+                  }
+                />
+                <TextareaField
+                  label="Exames disponiveis"
+                  hint="Usado nos fluxos de agendamento de exames."
+                  value={form.examOptions}
+                  rows={4}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, examOptions: value }))
+                  }
+                />
+                <TextareaField
+                  label="Status da solicitacao medica"
+                  hint="Respostas mostradas depois que o lead seleciona exames."
+                  value={form.medicalRequestOptions}
+                  rows={3}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      medicalRequestOptions: value,
+                    }))
+                  }
+                />
+                <TextareaField
+                  label="Necessidades da consulta"
+                  hint="Usado nos fluxos de consulta para entender a demanda principal."
+                  value={form.consultationNeeds}
+                  rows={4}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, consultationNeeds: value }))
+                  }
+                />
+                <TextareaField
+                  label="Decisoes de agendamento"
+                  hint="Opcoes finais depois de explicar consulta, valor e endereco."
+                  value={form.consultationDecisions}
+                  rows={3}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      consultationDecisions: value,
+                    }))
+                  }
+                />
+              </div>
+
+              <SectionTitle
+                title="Integracoes de origem e conversao"
+                subtitle="Essas chaves ficam no backend. Elas nao aparecem no embed nem na configuracao publica do bot."
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextField
+                  label="Meta Pixel ID"
+                  hint="ID numerico do Pixel no Meta Events Manager. Usado para enviar Lead via Conversions API."
+                  value={form.metaPixelId}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, metaPixelId: value }))
+                  }
+                />
+                <TextField
+                  label="Meta Access Token"
+                  hint="Token da Conversions API do Pixel. Cole aqui somente o token server-side do cliente."
+                  value={form.metaAccessToken}
+                  type="password"
+                  autoComplete="off"
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, metaAccessToken: value }))
+                  }
+                />
+                <TextField
+                  label="Meta Test Event Code"
+                  hint="Opcional. Codigo da aba Test Events para validar eventos antes de producao."
+                  value={form.metaTestEventCode}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, metaTestEventCode: value }))
+                  }
+                />
+                <TextField
+                  label="GA4 Measurement ID"
+                  hint="ID do stream web no GA4, geralmente no formato G-XXXXXXXXXX."
+                  value={form.ga4MeasurementId}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, ga4MeasurementId: value }))
+                  }
+                />
+                <TextField
+                  label="GA4 API Secret"
+                  hint="Secret do Measurement Protocol em Admin > Data Streams > Measurement Protocol API secrets."
+                  value={form.ga4ApiSecret}
+                  type="password"
+                  autoComplete="off"
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, ga4ApiSecret: value }))
+                  }
+                />
+              </div>
+
+              {createError ? (
+                <p className="mt-5 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+                  {createError}
+                </p>
+              ) : null}
+              {createSuccess ? (
+                <p className="mt-5 rounded-lg border border-emerald-900/60 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
+                  {createSuccess}
+                </p>
+              ) : null}
+
+              <div className="mt-6 flex justify-end gap-3 border-t border-[#252836] pt-5">
+                <button
+                  type="button"
+                  onClick={() => setShowNewBot(false)}
+                  className="rounded-lg border border-[#303445] px-4 py-2 text-sm font-semibold text-[#9ca3af] transition hover:border-[#4b5563] hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingChatbot}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCreatingChatbot ? "Criando..." : "Criar chatbot"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -560,6 +993,93 @@ export function DashboardHome() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SectionTitle({
+  subtitle,
+  title,
+}: {
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <div className="mb-4 mt-6 border-t border-[#252836] pt-5">
+      <p className="font-semibold text-white">{title}</p>
+      <p className="mt-1 text-sm text-[#6b7280]">{subtitle}</p>
+    </div>
+  );
+}
+
+function TextField({
+  autoComplete,
+  hint,
+  label,
+  onChange,
+  required,
+  type = "text",
+  value,
+}: {
+  autoComplete?: string;
+  hint: string;
+  label: string;
+  onChange(value: string): void;
+  required?: boolean;
+  type?: "password" | "text";
+  value: string;
+}) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block font-semibold text-[#d1d5db]">{label}</span>
+      <input
+        autoComplete={autoComplete}
+        required={required}
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 w-full rounded-lg border border-[#303445] bg-[#0f1117] px-3 text-sm text-white outline-none transition focus:border-indigo-500"
+      />
+      <span className="mt-1 block text-xs leading-5 text-[#6b7280]">{hint}</span>
+    </label>
+  );
+}
+
+function TextareaField({
+  hint,
+  label,
+  onChange,
+  rows,
+  value,
+}: {
+  hint: string;
+  label: string;
+  onChange(value: string): void;
+  rows: number;
+  value: string;
+}) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block font-semibold text-[#d1d5db]">{label}</span>
+      <textarea
+        rows={rows}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full resize-y rounded-lg border border-[#303445] bg-[#0f1117] px-3 py-2 text-sm text-white outline-none transition focus:border-indigo-500"
+      />
+      <span className="mt-1 block text-xs leading-5 text-[#6b7280]">{hint}</span>
+    </label>
+  );
+}
+
+function IntegrationPill({ active, label }: { active: boolean; label: string }) {
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+        active ? "bg-emerald-500/15 text-emerald-300" : "bg-[#252836] text-[#6b7280]"
+      }`}
+    >
+      {label} {active ? "on" : "off"}
+    </span>
+  );
+}
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -610,4 +1130,24 @@ function MetricCard({
       </div>
     </div>
   );
+}
+
+function splitLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function flowLabel(flowKey: ConversationFlowKey) {
+  return FLOW_OPTIONS.find((flow) => flow.key === flowKey)?.label ?? flowKey;
 }

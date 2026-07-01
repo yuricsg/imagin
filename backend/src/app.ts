@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { toPublicChatbotConfig } from "./chatbots/catalog.js";
+import { getConversationFlow } from "./chatbots/conversation-flows.js";
 import { PrismaChatbotRepository } from "./chatbots/prisma-chatbot-repository.js";
 import { PrismaLeadRepository } from "./leads/prisma-lead-repository.js";
-import { prisma } from "./db.js";
+import { getPrisma } from "./db.js";
 import {
   buildLeadRecordInput,
   leadToDto,
@@ -30,10 +31,13 @@ const defaultCorsOrigins = [
 ];
 
 export function createApp(options: AppOptions = {}) {
+  const prisma = options.chatbotRepository && options.leadRepository
+    ? null
+    : getPrisma();
   const chatbotRepository =
-    options.chatbotRepository ?? new PrismaChatbotRepository(prisma);
+    options.chatbotRepository ?? new PrismaChatbotRepository(prisma!);
   const leadRepository =
-    options.leadRepository ?? new PrismaLeadRepository(prisma);
+    options.leadRepository ?? new PrismaLeadRepository(prisma!);
   const corsOrigins = options.corsOrigins ?? readCorsOrigins();
   const trackingService = options.trackingService ?? createTrackingService();
   const app = new Hono();
@@ -203,6 +207,7 @@ function validateCreateChatbot(rawBody: unknown): CreateChatbotValidationResult 
   const clientId = readRequiredString(rawBody, "clientId", issues);
   const clientName = readRequiredString(rawBody, "clientName", issues);
   const status = readStatus(rawBody.status);
+  const flowKey = getConversationFlow(rawBody.flowKey).key;
   const description = readOptionalString(rawBody.description);
   const whatsappPhone = readOptionalString(rawBody.whatsappPhone);
   const tracking = readTracking(rawBody.tracking);
@@ -228,6 +233,7 @@ function validateCreateChatbot(rawBody: unknown): CreateChatbotValidationResult 
       clientId,
       clientName,
       status,
+      flowKey,
       description,
       whatsappPhone,
       tracking,

@@ -1,6 +1,21 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+let prisma: PrismaClient | null = null;
 
-export const prisma = new PrismaClient({ adapter });
+export function getPrisma() {
+  if (prisma) {
+    return prisma;
+  }
+
+  const connectionString = process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is required when using the Prisma repositories");
+  }
+
+  const adapter = new PrismaPg({ connectionString });
+  prisma = new PrismaClient({ adapter });
+
+  return prisma;
+}

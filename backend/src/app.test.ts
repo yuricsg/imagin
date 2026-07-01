@@ -22,6 +22,7 @@ test("creates and lists an exam lead", async () => {
 
   try {
     const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
       leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
       trackingService: noOpTrackingService,
     });
@@ -83,30 +84,50 @@ test("creates and lists an exam lead", async () => {
 });
 
 test("rejects missing required lead fields", async () => {
-  const app = createApp();
-  const response = await app.request("/api/public/chatbots/dra-renata-reis/leads", {
-    method: "POST",
-    body: JSON.stringify({ intent: "schedule_exam" }),
-    headers: new Headers({ "Content-Type": "application/json" }),
-  });
-  const body = await response.json();
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-leads-"));
 
-  assert.equal(response.status, 400);
-  assert.ok(body.issues.includes("name is required"));
-  assert.ok(body.issues.includes("clientId is required"));
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+    });
+    const response = await app.request("/api/public/chatbots/dra-renata-reis/leads", {
+      method: "POST",
+      body: JSON.stringify({ intent: "schedule_exam" }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.ok(body.issues.includes("name is required"));
+    assert.ok(body.issues.includes("clientId is required"));
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("allows localhost dashboard ports during development", async () => {
-  const app = createApp();
-  const response = await app.request("/api/leads", {
-    headers: new Headers({ Origin: "http://localhost:3002" }),
-  });
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-leads-"));
 
-  assert.equal(response.status, 200);
-  assert.equal(
-    response.headers.get("access-control-allow-origin"),
-    "http://localhost:3002",
-  );
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+    });
+    const response = await app.request("/api/leads", {
+      headers: new Headers({ Origin: "http://localhost:3002" }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get("access-control-allow-origin"),
+      "http://localhost:3002",
+    );
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("lists configured chatbots and filters leads by bot", async () => {
@@ -114,6 +135,7 @@ test("lists configured chatbots and filters leads by bot", async () => {
 
   try {
     const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
       leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
       trackingService: noOpTrackingService,
     });
@@ -159,6 +181,7 @@ test("passes created leads to tracking service with request context", async () =
 
   try {
     const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
       leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
       trackingService,
     });
@@ -196,6 +219,7 @@ test("creates a chatbot with private integration credentials", async () => {
   try {
     const app = createApp({
       chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
       trackingService: noOpTrackingService,
     });
 
@@ -209,6 +233,7 @@ test("creates a chatbot with private integration credentials", async () => {
         description: "Bot de captação de leads.",
         whatsappPhone: "5587999999999",
         status: "active",
+        flowKey: "consultation_scheduling",
         buttonTexts: ["Agende agora"],
         examOptions: ["Exame A"],
         medicalRequestOptions: ["Sim", "Não"],
@@ -231,6 +256,8 @@ test("creates a chatbot with private integration credentials", async () => {
 
     assert.equal(response.status, 201);
     assert.equal(body.chatbot.botId, "clinica-teste");
+    assert.equal(body.chatbot.flowKey, "consultation_scheduling");
+    assert.equal(body.chatbot.conversationFlow.intents.length, 1);
     assert.equal(body.chatbot.integrationStatus.metaConfigured, true);
     assert.equal(body.chatbot.integrationStatus.googleAnalyticsConfigured, true);
     assert.equal(JSON.stringify(body).includes("secret-token"), false);
@@ -243,6 +270,7 @@ test("creates a chatbot with private integration credentials", async () => {
 
     assert.equal(publicResponse.status, 200);
     assert.equal(publicBody.chatbot.name, "Clínica Teste");
+    assert.equal(publicBody.chatbot.conversationFlow.key, "consultation_scheduling");
     assert.equal(JSON.stringify(publicBody).includes("secret-token"), false);
   } finally {
     await rm(tempDir, { force: true, recursive: true });
@@ -267,6 +295,7 @@ test("uses a created chatbot to accept leads", async () => {
         clientId: "cliente-dinamico",
         clientName: "Cliente Dinâmico",
         status: "active",
+        flowKey: "exam_scheduling",
         whatsappPhone: "",
         buttonTexts: ["Olá"],
         examOptions: ["Exame Dinâmico"],
@@ -295,6 +324,57 @@ test("uses a created chatbot to accept leads", async () => {
     assert.equal(response.status, 201);
     assert.equal(body.lead.botId, "bot-dinamico");
     assert.match(body.whatsappMessage, /Exame Dinâmico/);
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("rejects leads for intents disabled by the chatbot flow", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-chatbots-"));
+
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+    });
+
+    await app.request("/api/chatbots", {
+      method: "POST",
+      body: JSON.stringify({
+        botId: "bot-consulta",
+        name: "Bot Consulta",
+        clientId: "cliente-consulta",
+        clientName: "Cliente Consulta",
+        status: "active",
+        flowKey: "consultation_scheduling",
+        whatsappPhone: "",
+        buttonTexts: ["Olá"],
+        examOptions: ["Exame Dinâmico"],
+        medicalRequestOptions: ["Sim", "Não"],
+        consultationNeeds: ["Check-up"],
+        consultationDecisions: ["Quero agendar uma consulta"],
+        tracking: {},
+      }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+
+    const response = await app.request("/api/public/chatbots/bot-consulta/leads", {
+      method: "POST",
+      body: JSON.stringify({
+        clientId: "cliente-consulta",
+        name: "Lead Fora do Fluxo",
+        intent: "schedule_exam",
+        selectedExams: ["Exame Dinâmico"],
+        medicalRequestStatus: "Sim",
+        source: {},
+      }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.ok(body.issues.includes("intent is not enabled for this chatbot flow"));
   } finally {
     await rm(tempDir, { force: true, recursive: true });
   }

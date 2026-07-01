@@ -19,12 +19,25 @@ type Step =
 type ChatbotConfig = {
   botId: string;
   name: string;
+  flowKey: ConversationFlowKey;
+  conversationFlow: {
+    key: ConversationFlowKey;
+    label: string;
+    description: string;
+    intents: LeadIntent[];
+  };
   buttonTexts: string[];
   examOptions: string[];
   medicalRequestOptions: string[];
   consultationNeeds: string[];
   consultationDecisions: string[];
 };
+
+type ConversationFlowKey =
+  | "cardiology_exam_consultation"
+  | "exam_scheduling"
+  | "consultation_scheduling"
+  | "urgent_triage";
 
 type LeadResponse = {
   lead: { id: string; intent: LeadIntent };
@@ -55,6 +68,13 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:400
 const fallbackConfig: ChatbotConfig = {
   botId: "loading",
   name: "Assistente",
+  flowKey: "cardiology_exam_consultation",
+  conversationFlow: {
+    key: "cardiology_exam_consultation",
+    label: "Consulta + exames cardiologicos",
+    description: "Fluxo completo de atendimento.",
+    intents: ["schedule_exam", "schedule_consultation", "severe_symptoms"],
+  },
   buttonTexts: ["Iniciar atendimento"],
   examOptions: [],
   medicalRequestOptions: [],
@@ -75,8 +95,10 @@ export function EmbeddedChatbot({
   const [selectedExams, setSelectedExams] = useState<string[]>([]);
   const [consultationNeed, setConsultationNeed] = useState("");
   const [leadResponse, setLeadResponse] = useState<LeadResponse | null>(null);
+  const [isConfigLoading, setIsConfigLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [configError, setConfigError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,17 +106,26 @@ export function EmbeddedChatbot({
       const response = await fetch(
         `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/config`,
       );
-      if (response.ok) {
-        const body = (await response.json()) as { chatbot: ChatbotConfig };
-        setConfig(body.chatbot);
+      if (!response.ok) {
+        setConfigError("Não foi possível carregar este assistente.");
+        setIsConfigLoading(false);
+        return;
       }
+
+      const body = (await response.json()) as { chatbot: ChatbotConfig };
+      setConfig(body.chatbot);
+      setConfigError("");
+      setIsConfigLoading(false);
     }
-    void loadConfig().catch(() => undefined);
+    void loadConfig().catch(() => {
+      setConfigError("Não foi possível carregar este assistente.");
+      setIsConfigLoading(false);
+    });
   }, [botId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [step]);
+  }, [step, selectedExams.length, leadResponse, error]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -118,6 +149,10 @@ export function EmbeddedChatbot({
     }),
     [initialSource, pageUrl, parentOrigin],
   );
+  const allowedIntents = config.conversationFlow?.intents ?? fallbackConfig.conversationFlow.intents;
+  const canScheduleExam = allowedIntents.includes("schedule_exam");
+  const canScheduleConsultation = allowedIntents.includes("schedule_consultation");
+  const canTriageUrgency = allowedIntents.includes("severe_symptoms");
 
   async function submitLead(payload: {
     intent: LeadIntent;
@@ -159,7 +194,7 @@ export function EmbeddedChatbot({
   }
 
   return (
-    <div className="flex h-screen flex-col bg-white font-sans text-[#172033]">
+    <div className="flex min-h-[100dvh] flex-col bg-white font-sans text-[#172033]">
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-[#e8ecf3] bg-[#205ea8] px-4 py-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-base font-bold text-white">
@@ -175,9 +210,20 @@ export function EmbeddedChatbot({
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
         <Bot>Olá, tudo bem? 😊</Bot>
         <Bot>Para iniciar o atendimento preciso de algumas informações rápidas.</Bot>
+        {isConfigLoading && (
+          <p className="text-center text-xs text-[#8792a5]">
+            Carregando assistente...
+          </p>
+        )}
+
+        {configError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {configError}
+          </div>
+        )}
 
         {/* Step: name */}
-        {step === "name" && (
+        {step === "name" && !isConfigLoading && !configError && (
           <div className="space-y-3">
             <Bot>Como posso te chamar?</Bot>
             <div className="flex gap-2">
@@ -203,17 +249,28 @@ export function EmbeddedChatbot({
           </div>
         )}
 
-        {step !== "name" && <User>{name.trim()}</User>}
+        {step !== "name" && name.trim() ? <User>{name.trim()}</User> : null}
 
         {/* Step: intent */}
         {step === "intent" && (
           <div className="space-y-2">
             <Bot>Prazer, {name.trim()}! 👋 O que você deseja fazer hoje?</Bot>
-            <Option onClick={() => setStep("examSelection")}>🔬 Agendar exame</Option>
-            <Option onClick={() => setStep("consultationNeed")}>🩺 Marcar consulta cardiológica</Option>
-            <Option onClick={() => void submitLead({ intent: "severe_symptoms" })}>
-              🚨 Avaliação de sintomas graves (pressão alta ou dor no peito)
-            </Option>
+            {canScheduleExam && (
+              <Option onClick={() => setStep("examSelection")}>🔬 Agendar exame</Option>
+            )}
+            {canScheduleConsultation && (
+              <Option onClick={() => setStep("consultationNeed")}>🩺 Marcar consulta cardiológica</Option>
+            )}
+            {canTriageUrgency && (
+              <Option onClick={() => void submitLead({ intent: "severe_symptoms" })}>
+                🚨 Avaliação de sintomas graves (pressão alta ou dor no peito)
+              </Option>
+            )}
+            {!canScheduleExam && !canScheduleConsultation && !canTriageUrgency && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                Nenhum fluxo ativo foi configurado para este assistente.
+              </div>
+            )}
           </div>
         )}
 

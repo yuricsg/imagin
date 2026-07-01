@@ -10,6 +10,7 @@ export const renataReisChatbot: ChatbotDefinition = {
   clientId: "clinica-renata",
   clientName: "Clínica Renata Reis",
   status: "active",
+  flowKey: "cardiology_exam_consultation",
   description: "Captação de leads para consultas e exames cardiológicos.",
   whatsappPhone: process.env.RENATA_REIS_WHATSAPP ?? "",
   tracking: {

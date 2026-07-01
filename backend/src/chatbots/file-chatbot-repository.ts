@@ -4,6 +4,7 @@ import {
   staticChatbotDefinitions,
   toPublicChatbotConfig,
 } from "./catalog.js";
+import { getConversationFlow } from "./conversation-flows.js";
 import {
   defaultButtonTexts,
   defaultConsultationDecisions,
@@ -95,6 +96,7 @@ function normalizeStoredChatbot(input: CreateChatbotInput | StoredChatbot) {
     clientId: input.clientId,
     clientName: input.clientName,
     status: normalizeStatus(input.status),
+    flowKey: getConversationFlow(input.flowKey).key,
     description: input.description ?? "",
     whatsappPhone: input.whatsappPhone ?? "",
     tracking: {

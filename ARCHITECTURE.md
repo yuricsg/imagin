@@ -12,13 +12,13 @@ The repository currently contains a Next.js dashboard in `dashboard/` and a Hono
 - Widget: static loader implemented at `/embed/widget.js`.
 - Chatbot iframe: implemented at `/chatbots/[botId]/embed`.
 - Chatbot registry: static defaults in `backend/src/chatbots/catalog.ts` plus custom bots created through the dashboard.
-- Persistence: local JSON file storage in `backend/data/leads.json` and `backend/data/chatbots.json`.
+- Persistence: Prisma/Postgres for runtime repositories, with local JSON repositories retained for focused tests and fallback development.
 - Attribution: widget captures UTM parameters, click IDs, referrer, page URL, landing page URL, `_fbp`, `_fbc`, and GA client ID from `_ga`.
 - Tracking dispatch: backend can send Meta Conversions API and GA4 Measurement Protocol events after lead creation.
 - Authentication: not configured.
 - Multi-client model: `botId` and `clientId` are accepted, stored, listed, and filterable, but there is no authenticated organization/client model yet.
 
-The current MVP is intentionally small. It proves the embed-to-dashboard lead path before committing to a production database, authentication provider, or visual bot editor.
+The current MVP proves the embed-to-dashboard lead path with a production database, while authentication and a visual bot editor are still future work.
 
 ## Product Goal
 
@@ -36,6 +36,13 @@ The first chatbot flow is for Dra. Renata Reis and supports:
 - Medical request status.
 - Consultation need selection.
 - WhatsApp handoff message generation.
+
+Dashboard-managed bots can choose one conversation flow:
+
+- `cardiology_exam_consultation`: exams, cardiology consultation, and severe symptom triage.
+- `exam_scheduling`: exam scheduling only.
+- `consultation_scheduling`: consultation scheduling only.
+- `urgent_triage`: urgent triage only.
 
 ## Recommended Embed Strategy
 
@@ -109,7 +116,7 @@ Core entities:
 - `clients`
   - Represents a customer/site where a bot is installed.
 - `chatbots`
-  - Stores bot metadata, public slug, active status, and default WhatsApp destination.
+  - Stores bot metadata, public slug, active status, `flowKey`, and default WhatsApp destination.
 - `chatbot_versions`
   - Stores versioned flow definitions so historic leads remain explainable after bot edits.
 - `chat_sessions`
@@ -177,7 +184,7 @@ For the Dra. Renata Reis flow, the structured lead payload currently includes:
 - Keep personally identifiable information out of browser logs and analytics payloads.
 - Do not send lead names to Meta/GA4 payloads unless a future consent and hashing policy explicitly requires it.
 - Keep Meta access tokens and GA4 API secrets server-side only.
-- The MVP stores dashboard-managed bot secrets in local JSON for development only. Production storage must move these values to an encrypted database column or a secret manager.
+- The MVP stores dashboard-managed bot secrets server-side in Postgres. Production hardening should move these values to encrypted columns or a secret manager.
 
 ## MVP Implementation Order
 
@@ -191,8 +198,10 @@ For the Dra. Renata Reis flow, the structured lead payload currently includes:
 8. Done for MVP: add multi-chatbot catalog, bot cards, selected embed snippet, and bot/client filtering.
 9. Done: capture lead attribution context and add optional Meta/GA4 server-side event dispatch.
 10. Done for MVP: add dashboard chatbot creation with per-bot Meta and GA4 credential fields.
-11. Next: add production persistence with schema and migrations.
-12. Next: add tests for remaining critical flows:
+11. Done: add production persistence with Prisma/Postgres schema and migrations.
+12. Done: add selectable conversation flows for dashboard-managed bots.
+13. Done: add QA agent documentation and smoke runner.
+14. Next: add tests for remaining critical flows:
    - session creation
    - consultation lead API submission
    - severe symptom handoff
@@ -207,12 +216,12 @@ Before production use:
 - `npm run build`
 - Unit tests for flow state and WhatsApp message formatting.
 - API tests for public route validation and origin checks.
+- `node qa/qa-agent.mjs` against local or production URLs.
 - Browser test for real embed snippet on a representative external page.
-- Live database test for session, message, and lead persistence after the production database provider is chosen.
+- Live database test for bot creation, selected flow, lead persistence, and migration compatibility.
 
 ## Open Decisions
 
-- Database provider.
 - Authentication provider for the dashboard.
 - WhatsApp destination per bot or per client.
 - How far the dashboard editor should go beyond the current configuration form.

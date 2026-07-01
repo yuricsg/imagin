@@ -1,4 +1,8 @@
 import type { LeadSubmission } from "../leads/types.js";
+import type {
+  ConversationFlowDefinition,
+  ConversationFlowKey,
+} from "./conversation-flows.js";
 
 export type ChatbotDefinition = {
   botId: string;
@@ -6,6 +10,7 @@ export type ChatbotDefinition = {
   clientId: string;
   clientName: string;
   status: "active" | "draft" | "archived";
+  flowKey: ConversationFlowKey;
   description: string;
   whatsappPhone: string;
   tracking: {
@@ -37,6 +42,7 @@ export type PublicChatbotConfig = Omit<
   "whatsappPhone" | "tracking" | "formatWhatsAppMessage"
 > & {
   integrationStatus: ChatbotIntegrationStatus;
+  conversationFlow: ConversationFlowDefinition;
 };
 
 export type CreateChatbotInput = {
@@ -45,6 +51,7 @@ export type CreateChatbotInput = {
   clientId: string;
   clientName: string;
   status: ChatbotDefinition["status"];
+  flowKey: ConversationFlowKey;
   description: string;
   whatsappPhone: string;
   tracking: ChatbotDefinition["tracking"];

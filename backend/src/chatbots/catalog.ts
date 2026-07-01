@@ -1,4 +1,5 @@
 import { renataReisChatbot } from "./renata-reis.js";
+import { getConversationFlow } from "./conversation-flows.js";
 import type { ChatbotDefinition, PublicChatbotConfig } from "./types.js";
 
 export const staticChatbotDefinitions = [
@@ -40,6 +41,7 @@ function toPublicChatbotConfig(
 
   return {
     ...publicConfig,
+    conversationFlow: getConversationFlow(chatbot.flowKey),
     integrationStatus: {
       metaConfigured: Boolean(
         chatbot.tracking.meta?.pixelId && chatbot.tracking.meta.accessToken,

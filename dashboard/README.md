@@ -30,12 +30,17 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 NEXT_PUBLIC_WIDGET_BASE_URL=http:
 The home dashboard includes a creation form for dashboard-managed chatbots. It posts to the backend `POST /api/chatbots` endpoint and supports:
 
 - Bot and client identifiers.
+- Conversation flow:
+  - consultation + exams
+  - exams only
+  - consultation only
+  - urgent triage only
 - WhatsApp destination.
 - Floating button text and flow option lists.
 - Meta Pixel ID, Meta access token, Meta test event code.
 - GA4 measurement ID and GA4 API secret.
 
-The backend returns only integration status flags to the dashboard. Meta access tokens and GA4 API secrets are not included in public chatbot configuration or widget snippets.
+Each key field includes help text explaining where to find the value and what it does. The backend returns only integration status flags to the dashboard. Meta access tokens and GA4 API secrets are not included in public chatbot configuration or widget snippets.
 
 ## Embed Snippet
 
@@ -66,4 +71,5 @@ Do not add Meta or GA4 secrets to this snippet. Server-side tracking credentials
 ```bash
 npm run lint
 npm run build
+node ../qa/qa-agent.mjs --dashboard-url=http://localhost:3002 --api-url=http://localhost:4000
 ```

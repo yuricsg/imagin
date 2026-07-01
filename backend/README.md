@@ -4,6 +4,7 @@ Hono API for embeddable chatbot lead capture.
 
 ```
 npm install
+npx prisma generate
 npm run dev
 ```
 
@@ -66,7 +67,16 @@ Never expose access tokens or API secrets in the widget snippet or public chatbo
 
 ## Chatbot Catalog
 
-Static bots are registered in `src/chatbots/catalog.ts`. Dashboard-managed bots are stored through `src/chatbots/file-chatbot-repository.ts`. Each bot implements the shared `ChatbotDefinition` contract from `src/chatbots/types.ts`.
+Static bots are registered in `src/chatbots/catalog.ts`. Dashboard-managed bots are stored through Prisma/Postgres in `src/chatbots/prisma-chatbot-repository.ts`. The file repository remains available for focused tests. Each bot implements the shared `ChatbotDefinition` contract from `src/chatbots/types.ts`.
+
+Every bot has a `flowKey`:
+
+- `cardiology_exam_consultation`
+- `exam_scheduling`
+- `consultation_scheduling`
+- `urgent_triage`
+
+The public config includes `flowKey` and `conversationFlow`; the embed uses this to render only the intents enabled for that bot.
 
 To add another code-defined bot:
 
@@ -76,17 +86,28 @@ To add another code-defined bot:
 4. Configure server-side tracking credentials on the bot definition.
 5. Add or update tests for config exposure, validation rules, WhatsApp message formatting, and tracking payloads.
 
-To add a dashboard-managed bot, use `POST /api/chatbots` or the dashboard form. The API requires bot/client identifiers, flow option lists, WhatsApp destination, and optional `tracking.meta` / `tracking.googleAnalytics` credentials.
+To add a dashboard-managed bot, use `POST /api/chatbots` or the dashboard form. The API requires bot/client identifiers, `flowKey`, flow option lists, WhatsApp destination, and optional `tracking.meta` / `tracking.googleAnalytics` credentials.
 
-## Local Persistence
+## Persistence
 
-Until the production database provider is chosen, leads are stored in `data/leads.json` and dashboard-managed chatbots are stored in `data/chatbots.json`. Override the bot file with `CHATBOTS_FILE_PATH`.
+The runtime repositories use Prisma/Postgres and require `DATABASE_URL`. Generate the Prisma client after installing dependencies:
 
-The directory is ignored by git and is only intended for local MVP validation. Production must move bot configs and tracking secrets to durable storage with encryption or a secret manager.
+```bash
+npx prisma generate
+```
+
+Apply migrations with:
+
+```bash
+npx prisma migrate deploy
+```
+
+Local JSON repositories under `src/*/file-*-repository.ts` are intended for tests and isolated local validation.
 
 ## Validation
 
 ```
 npm run test
 npm run build
+node ../qa/qa-agent.mjs --api-url=http://localhost:4000 --dashboard-url=http://localhost:3002
 ```

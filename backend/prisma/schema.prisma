@@ -12,6 +12,7 @@ model Bot {
   clientId              String
   clientName            String
   status                String   @default("active")
+  flowKey               String   @default("cardiology_exam_consultation")
   description           String   @default("")
   whatsappPhone         String
   buttonTexts           String[]
