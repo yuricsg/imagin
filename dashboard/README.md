@@ -44,6 +44,8 @@ Each key field includes help text explaining where to find the value and what it
 
 ## Embed Snippet
 
+In the dashboard, select a chatbot in the sidebar and use the **Instalação no site do cliente** card to copy either the recommended script or the direct iframe snippet.
+
 The client site can load a chatbot with:
 
 ```html
@@ -56,6 +58,8 @@ The client site can load a chatbot with:
 ```
 
 The widget iframe lives at `/chatbots/[botId]/embed`. The script fetches public bot configuration from the backend, then injects the floating launcher and iframe.
+
+The iframe keeps a conversation-style timeline: the visitor's name and option choices are echoed as user bubbles, bot responses are delayed with a typing indicator, and the next controls only appear after the bot message sequence finishes. This keeps the guided flow feeling like a chat instead of an instant form.
 
 The widget automatically forwards attribution context to the backend:
 

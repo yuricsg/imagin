@@ -81,6 +81,8 @@ type ChatbotFormState = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const widgetBaseUrl =
+  process.env.NEXT_PUBLIC_WIDGET_BASE_URL ?? "https://imagin-virid.vercel.app";
 
 const FLOW_OPTIONS: ConversationFlowOption[] = [
   {
@@ -210,6 +212,7 @@ export function DashboardHome() {
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
   const [isCreatingChatbot, setIsCreatingChatbot] = useState(false);
+  const [copiedInstallCode, setCopiedInstallCode] = useState<"iframe" | "script" | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -315,10 +318,14 @@ export function DashboardHome() {
     () => new Map(chatbots.map((b, i) => [b.botId, { ...b, color: BOT_COLORS[i % BOT_COLORS.length] }])),
     [chatbots],
   );
+  const selectedBot = selectedBotId === "all" ? null : (botMap.get(selectedBotId) ?? null);
 
   const dayData = useMemo(() => groupByDay(filteredLeads), [filteredLeads]);
   const services = useMemo(() => topServices(filteredLeads), [filteredLeads]);
   const maxService = services[0]?.count ?? 1;
+  const installScript = selectedBot ? buildInstallScript(selectedBot) : "";
+  const iframeUrl = selectedBot ? buildIframeUrl(selectedBot) : "";
+  const iframeSnippet = selectedBot ? buildIframeSnippet(selectedBot) : "";
 
   const completed = filteredLeads.filter((l) => l.consultationDecision || l.medicalRequestStatus).length;
   const convRate = filteredLeads.length > 0 ? ((completed / filteredLeads.length) * 100).toFixed(1) : "0.0";
@@ -328,6 +335,14 @@ export function DashboardHome() {
     selectedBotId === "all"
       ? "Métricas consolidadas de todos os chatbots"
       : (botMap.get(selectedBotId)?.clientName ?? "");
+
+  async function copyInstallCode(kind: "iframe" | "script", value: string) {
+    if (!value) return;
+
+    await navigator.clipboard.writeText(value);
+    setCopiedInstallCode(kind);
+    window.setTimeout(() => setCopiedInstallCode(null), 1800);
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0d0f14] text-white lg:flex-row">
@@ -499,6 +514,51 @@ export function DashboardHome() {
                   color="#34d399"
                 />
               </div>
+
+              {/* ── Installation ── */}
+              <Card>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-semibold">Instalação no site do cliente</p>
+                    <p className="mt-1 text-sm text-[#6b7280]">
+                      Selecione um chatbot para copiar o código de instalação.
+                    </p>
+                  </div>
+                  {selectedBot ? (
+                    <a
+                      href={iframeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-[#303445] px-3 py-2 text-center text-sm font-semibold text-[#d1d5db] transition hover:border-indigo-500 hover:text-white"
+                    >
+                      Abrir iframe
+                    </a>
+                  ) : null}
+                </div>
+
+                {selectedBot ? (
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <InstallCodeBlock
+                      copied={copiedInstallCode === "script"}
+                      description="Recomendado para sites de clientes: cria o botão flutuante, abre o iframe e envia origem/UTMs ao backend."
+                      label="Script recomendado"
+                      value={installScript}
+                      onCopy={() => void copyInstallCode("script", installScript)}
+                    />
+                    <InstallCodeBlock
+                      copied={copiedInstallCode === "iframe"}
+                      description="Uso direto para testes, páginas internas ou embeds controlados. O script é melhor para captação pública."
+                      label="Iframe direto"
+                      value={iframeSnippet}
+                      onCopy={() => void copyInstallCode("iframe", iframeSnippet)}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-[#303445] bg-[#11131a] px-4 py-5 text-sm text-[#9ca3af]">
+                    Escolha um chatbot na lateral para ver o código que deve ser instalado no site.
+                  </div>
+                )}
+              </Card>
 
               {/* ── Area chart + Services ── */}
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -1081,6 +1141,41 @@ function IntegrationPill({ active, label }: { active: boolean; label: string }) 
   );
 }
 
+function InstallCodeBlock({
+  copied,
+  description,
+  label,
+  onCopy,
+  value,
+}: {
+  copied: boolean;
+  description: string;
+  label: string;
+  onCopy(): void;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[#252836] bg-[#11131a] p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">{label}</p>
+          <p className="mt-1 text-xs leading-5 text-[#6b7280]">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="shrink-0 rounded-lg border border-[#303445] px-3 py-1.5 text-xs font-semibold text-[#d1d5db] transition hover:border-indigo-500 hover:text-white"
+        >
+          {copied ? "Copiado" : "Copiar"}
+        </button>
+      </div>
+      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[#252836] bg-[#0b0d12] p-3 text-xs leading-5 text-[#c7d2fe]">
+        {value}
+      </pre>
+    </div>
+  );
+}
+
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[#1e2130] bg-[#171923] p-5">{children}</div>
@@ -1150,4 +1245,38 @@ function slugify(value: string) {
 
 function flowLabel(flowKey: ConversationFlowKey) {
   return FLOW_OPTIONS.find((flow) => flow.key === flowKey)?.label ?? flowKey;
+}
+
+function normalizedBaseUrl(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function buildIframeUrl(bot: Pick<ChatbotDto, "botId" | "clientId">) {
+  const url = new URL(
+    `/chatbots/${encodeURIComponent(bot.botId)}/embed`,
+    normalizedBaseUrl(widgetBaseUrl),
+  );
+  url.searchParams.set("clientId", bot.clientId);
+
+  return url.toString();
+}
+
+function buildInstallScript(bot: Pick<ChatbotDto, "botId" | "clientId">) {
+  return `<script
+  src="${normalizedBaseUrl(widgetBaseUrl)}/embed/widget.js"
+  data-api-base-url="${normalizedBaseUrl(apiBaseUrl)}"
+  data-bot-id="${bot.botId}"
+  data-client-id="${bot.clientId}"
+></script>`;
+}
+
+function buildIframeSnippet(bot: Pick<ChatbotDto, "botId" | "clientId">) {
+  return `<iframe
+  src="${buildIframeUrl(bot)}"
+  title="Assistente de agendamento"
+  width="420"
+  height="640"
+  style="border:0;width:100%;max-width:420px;height:640px"
+  loading="lazy"
+></iframe>`;
 }

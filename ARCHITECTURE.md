@@ -71,6 +71,8 @@ The iframe should:
 
 - Load from the Imagin domain.
 - Run the actual chatbot UI.
+- Render a persistent conversation timeline where every user choice becomes a user message.
+- Show a short typing indicator before bot replies and before the next option set appears.
 - Submit lead events directly to Imagin APIs.
 - Open WhatsApp in a new tab only after explicit user action.
 
@@ -201,7 +203,8 @@ For the Dra. Renata Reis flow, the structured lead payload currently includes:
 11. Done: add production persistence with Prisma/Postgres schema and migrations.
 12. Done: add selectable conversation flows for dashboard-managed bots.
 13. Done: add QA agent documentation and smoke runner.
-14. Next: add tests for remaining critical flows:
+14. Done: make the iframe interaction conversational with user-message echoes and bot typing states.
+15. Next: add tests for remaining critical flows:
    - session creation
    - consultation lead API submission
    - severe symptom handoff

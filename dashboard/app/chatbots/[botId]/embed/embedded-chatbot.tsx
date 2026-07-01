@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type LeadIntent =
   | "schedule_exam"
@@ -8,6 +8,7 @@ type LeadIntent =
   | "severe_symptoms";
 
 type Step =
+  | "idle"
   | "name"
   | "intent"
   | "examSelection"
@@ -55,6 +56,12 @@ type LeadSource = {
   cookies?: Record<string, string>;
 };
 
+type ChatMessage = {
+  id: string;
+  sender: "bot" | "user";
+  text: string;
+};
+
 type EmbeddedChatbotProps = {
   botId: string;
   clientId: string;
@@ -64,6 +71,17 @@ type EmbeddedChatbotProps = {
 };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+
+const INTRO_MESSAGES = [
+  "Olá, tudo bem? 😊",
+  "Para iniciar o atendimento preciso de algumas informações rápidas.",
+  "Como posso te chamar?",
+];
+
+const COMPLETION_MESSAGES = [
+  "Certo. Obrigada! 🙏",
+  "Envie a mensagem para a secretária para tirar dúvidas e verificar os horários disponíveis.",
+];
 
 const fallbackConfig: ChatbotConfig = {
   botId: "loading",
@@ -90,18 +108,78 @@ export function EmbeddedChatbot({
   parentOrigin,
 }: EmbeddedChatbotProps) {
   const [config, setConfig] = useState<ChatbotConfig>(fallbackConfig);
-  const [step, setStep] = useState<Step>("name");
+  const [activeStep, setActiveStep] = useState<Step>("idle");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [name, setName] = useState("");
   const [selectedExams, setSelectedExams] = useState<string[]>([]);
   const [consultationNeed, setConsultationNeed] = useState("");
   const [leadResponse, setLeadResponse] = useState<LeadResponse | null>(null);
   const [isConfigLoading, setIsConfigLoading] = useState(true);
+  const [isBotTyping, setIsBotTyping] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [configError, setConfigError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messageCounterRef = useRef(0);
+  const sequenceRef = useRef(0);
+  const timersRef = useRef<number[]>([]);
+  const introStartedRef = useRef(false);
+
+  const clearScheduledMessages = useCallback(() => {
+    timersRef.current.forEach((timer) => window.clearTimeout(timer));
+    timersRef.current = [];
+  }, []);
+
+  const addMessage = useCallback((sender: ChatMessage["sender"], text: string) => {
+    messageCounterRef.current += 1;
+    setMessages((current) => [
+      ...current,
+      {
+        id: `${Date.now()}-${messageCounterRef.current}`,
+        sender,
+        text,
+      },
+    ]);
+  }, []);
+
+  const addUserMessage = useCallback(
+    (text: string) => addMessage("user", text),
+    [addMessage],
+  );
+
+  const playBotMessages = useCallback(
+    async (lines: string[], onDone?: () => void) => {
+      clearScheduledMessages();
+      sequenceRef.current += 1;
+      const sequence = sequenceRef.current;
+      setActiveStep("idle");
+
+      const wait = (milliseconds: number) =>
+        new Promise<void>((resolve) => {
+          const timer = window.setTimeout(resolve, milliseconds);
+          timersRef.current.push(timer);
+        });
+
+      for (const line of lines) {
+        setIsBotTyping(true);
+        await wait(Math.min(1100, 420 + line.length * 12));
+        if (sequence !== sequenceRef.current) return;
+        setIsBotTyping(false);
+        addMessage("bot", line);
+        await wait(240);
+        if (sequence !== sequenceRef.current) return;
+      }
+
+      onDone?.();
+    },
+    [addMessage, clearScheduledMessages],
+  );
 
   useEffect(() => {
+    clearScheduledMessages();
+    sequenceRef.current += 1;
+    introStartedRef.current = false;
+
     async function loadConfig() {
       const response = await fetch(
         `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/config`,
@@ -121,11 +199,24 @@ export function EmbeddedChatbot({
       setConfigError("Não foi possível carregar este assistente.");
       setIsConfigLoading(false);
     });
-  }, [botId]);
+  }, [botId, clearScheduledMessages]);
+
+  useEffect(() => {
+    return () => {
+      sequenceRef.current += 1;
+      clearScheduledMessages();
+    };
+  }, [clearScheduledMessages]);
+
+  useEffect(() => {
+    if (isConfigLoading || configError || introStartedRef.current) return;
+    introStartedRef.current = true;
+    void playBotMessages(INTRO_MESSAGES, () => setActiveStep("name"));
+  }, [configError, isConfigLoading, playBotMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [step, selectedExams.length, leadResponse, error]);
+  }, [activeStep, messages.length, selectedExams.length, leadResponse, error, isBotTyping]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -135,7 +226,7 @@ export function EmbeddedChatbot({
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [parentOrigin, step, selectedExams, leadResponse, error]);
+  }, [parentOrigin, activeStep, messages.length, selectedExams, leadResponse, error, isBotTyping]);
 
   const source = useMemo(
     () => ({
@@ -154,13 +245,72 @@ export function EmbeddedChatbot({
   const canScheduleConsultation = allowedIntents.includes("schedule_consultation");
   const canTriageUrgency = allowedIntents.includes("severe_symptoms");
 
+  function submitName() {
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2) return;
+
+    addUserMessage(trimmedName);
+    void playBotMessages(
+      [`Prazer, ${trimmedName}! 👋`, "O que você deseja fazer hoje?"],
+      () => setActiveStep("intent"),
+    );
+  }
+
+  function selectIntent(intent: LeadIntent) {
+    if (intent === "schedule_exam") {
+      addUserMessage("Agendar exame");
+      setSelectedExams([]);
+      void playBotMessages(
+        ["Qual exame você deseja realizar? Pode selecionar mais de um."],
+        () => setActiveStep("examSelection"),
+      );
+      return;
+    }
+
+    if (intent === "schedule_consultation") {
+      addUserMessage("Marcar consulta cardiológica");
+      void playBotMessages(
+        ["Qual é sua principal necessidade hoje? 🤔"],
+        () => setActiveStep("consultationNeed"),
+      );
+      return;
+    }
+
+    addUserMessage("Avaliação de sintomas graves (pressão alta ou dor no peito)");
+    void submitLead({ intent: "severe_symptoms" }, "intent");
+  }
+
+  function continueWithSelectedExams() {
+    if (selectedExams.length === 0) return;
+    addUserMessage(selectedExams.join(", "));
+    void playBotMessages(
+      ["Você possui solicitação médica para esse(s) exame(s)?"],
+      () => setActiveStep("medicalRequest"),
+    );
+  }
+
+  function selectConsultationNeed(need: string) {
+    addUserMessage(need);
+    setConsultationNeed(need);
+    void playBotMessages(
+      [
+        "A consulta com a Dra. Renata Reis dura em média 1 hora, com eletrocardiograma incluso. 😊",
+        "Investimento: R$ 430,00, com direito a retorno.",
+        "Atendimento na Av. Djalma Dutra, 606, Medcenter, Heliópolis — Garanhuns.",
+        "Quer agendar a consulta agora?",
+      ],
+      () => setActiveStep("consultationDecision"),
+    );
+  }
+
   async function submitLead(payload: {
     intent: LeadIntent;
     medicalRequestStatus?: string;
     consultationDecision?: string;
-  }) {
+  }, restoreStep: Step) {
     setIsSubmitting(true);
     setError("");
+    setActiveStep("idle");
     try {
       const response = await fetch(
         `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
@@ -181,14 +331,15 @@ export function EmbeddedChatbot({
       );
       if (!response.ok) throw new Error(`API respondeu ${response.status}`);
       setLeadResponse((await response.json()) as LeadResponse);
-      setStep("complete");
+      setIsSubmitting(false);
+      await playBotMessages(COMPLETION_MESSAGES, () => setActiveStep("complete"));
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
           : "Não foi possível registrar o lead.",
       );
-    } finally {
+      setActiveStep(restoreStep);
       setIsSubmitting(false);
     }
   }
@@ -208,8 +359,14 @@ export function EmbeddedChatbot({
 
       {/* Messages */}
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
-        <Bot>Olá, tudo bem? 😊</Bot>
-        <Bot>Para iniciar o atendimento preciso de algumas informações rápidas.</Bot>
+        {messages.map((message) =>
+          message.sender === "bot" ? (
+            <Bot key={message.id}>{message.text}</Bot>
+          ) : (
+            <User key={message.id}>{message.text}</User>
+          ),
+        )}
+
         {isConfigLoading && (
           <p className="text-center text-xs text-[#8792a5]">
             Carregando assistente...
@@ -222,16 +379,17 @@ export function EmbeddedChatbot({
           </div>
         )}
 
+        {isBotTyping && <TypingIndicator />}
+
         {/* Step: name */}
-        {step === "name" && !isConfigLoading && !configError && (
+        {activeStep === "name" && !isConfigLoading && !configError && (
           <div className="space-y-3">
-            <Bot>Como posso te chamar?</Bot>
             <div className="flex gap-2">
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && name.trim().length >= 2) setStep("intent");
+                  if (e.key === "Enter") submitName();
                 }}
                 placeholder="Seu nome"
                 autoFocus
@@ -240,7 +398,7 @@ export function EmbeddedChatbot({
               <button
                 type="button"
                 disabled={name.trim().length < 2}
-                onClick={() => setStep("intent")}
+                onClick={submitName}
                 className="rounded-xl bg-[#205ea8] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#184d8a] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 OK
@@ -249,20 +407,17 @@ export function EmbeddedChatbot({
           </div>
         )}
 
-        {step !== "name" && name.trim() ? <User>{name.trim()}</User> : null}
-
         {/* Step: intent */}
-        {step === "intent" && (
+        {activeStep === "intent" && (
           <div className="space-y-2">
-            <Bot>Prazer, {name.trim()}! 👋 O que você deseja fazer hoje?</Bot>
             {canScheduleExam && (
-              <Option onClick={() => setStep("examSelection")}>🔬 Agendar exame</Option>
+              <Option onClick={() => selectIntent("schedule_exam")}>🔬 Agendar exame</Option>
             )}
             {canScheduleConsultation && (
-              <Option onClick={() => setStep("consultationNeed")}>🩺 Marcar consulta cardiológica</Option>
+              <Option onClick={() => selectIntent("schedule_consultation")}>🩺 Marcar consulta cardiológica</Option>
             )}
             {canTriageUrgency && (
-              <Option onClick={() => void submitLead({ intent: "severe_symptoms" })}>
+              <Option onClick={() => selectIntent("severe_symptoms")}>
                 🚨 Avaliação de sintomas graves (pressão alta ou dor no peito)
               </Option>
             )}
@@ -275,9 +430,8 @@ export function EmbeddedChatbot({
         )}
 
         {/* Step: examSelection */}
-        {step === "examSelection" && (
+        {activeStep === "examSelection" && (
           <div className="space-y-3">
-            <Bot>Qual exame você deseja realizar? Pode selecionar mais de um.</Bot>
             <div className="space-y-2">
               {config.examOptions.map((exam) => {
                 const checked = selectedExams.includes(exam);
@@ -312,7 +466,7 @@ export function EmbeddedChatbot({
               <button
                 type="button"
                 disabled={selectedExams.length === 0}
-                onClick={() => setStep("medicalRequest")}
+                onClick={continueWithSelectedExams}
                 className="w-full rounded-xl bg-[#205ea8] py-3 text-sm font-semibold text-white transition hover:bg-[#184d8a] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Continuar {selectedExams.length > 0 ? `(${selectedExams.length} selecionado${selectedExams.length > 1 ? "s" : ""})` : ""}
@@ -322,14 +476,19 @@ export function EmbeddedChatbot({
         )}
 
         {/* Step: medicalRequest */}
-        {step === "medicalRequest" && (
+        {activeStep === "medicalRequest" && (
           <div className="space-y-2">
-            <Bot>Você possui solicitação médica para esse(s) exame(s)?</Bot>
             {config.medicalRequestOptions.map((option) => (
               <Option
                 key={option}
                 disabled={isSubmitting}
-                onClick={() => void submitLead({ intent: "schedule_exam", medicalRequestStatus: option })}
+                onClick={() => {
+                  addUserMessage(option);
+                  void submitLead(
+                    { intent: "schedule_exam", medicalRequestStatus: option },
+                    "medicalRequest",
+                  );
+                }}
               >
                 {option}
               </Option>
@@ -338,16 +497,12 @@ export function EmbeddedChatbot({
         )}
 
         {/* Step: consultationNeed */}
-        {step === "consultationNeed" && (
+        {activeStep === "consultationNeed" && (
           <div className="space-y-2">
-            <Bot>Qual é sua principal necessidade hoje? 🤔</Bot>
             {config.consultationNeeds.map((need) => (
               <Option
                 key={need}
-                onClick={() => {
-                  setConsultationNeed(need);
-                  setStep("consultationDecision");
-                }}
+                onClick={() => selectConsultationNeed(need)}
               >
                 {need}
               </Option>
@@ -356,17 +511,22 @@ export function EmbeddedChatbot({
         )}
 
         {/* Step: consultationDecision */}
-        {step === "consultationDecision" && (
+        {activeStep === "consultationDecision" && (
           <div className="space-y-2">
-            <Bot>A consulta com a Dra. Renata Reis dura em média 1 hora, com eletrocardiograma incluso. 😊</Bot>
-            <Bot>Investimento: R$ 430,00, com direito a retorno.</Bot>
-            <Bot>Atendimento na Av. Djalma Dutra, 606, Medcenter, Heliópolis — Garanhuns.</Bot>
-            <Bot>Quer agendar a consulta agora?</Bot>
             {config.consultationDecisions.map((decision) => (
               <Option
                 key={decision}
                 disabled={isSubmitting}
-                onClick={() => void submitLead({ intent: "schedule_consultation", consultationDecision: decision })}
+                onClick={() => {
+                  addUserMessage(decision);
+                  void submitLead(
+                    {
+                      intent: "schedule_consultation",
+                      consultationDecision: decision,
+                    },
+                    "consultationDecision",
+                  );
+                }}
               >
                 {decision}
               </Option>
@@ -384,10 +544,8 @@ export function EmbeddedChatbot({
           </div>
         )}
 
-        {step === "complete" && leadResponse && (
+        {activeStep === "complete" && leadResponse && (
           <div className="space-y-3">
-            <Bot>Certo. Obrigada! 🙏</Bot>
-            <Bot>Envie a mensagem para a secretária para tirar dúvidas e verificar os horários disponíveis.</Bot>
             <a
               href={leadResponse.whatsappUrl}
               target="_blank"
@@ -405,7 +563,7 @@ export function EmbeddedChatbot({
           </div>
         )}
 
-        <div ref={step !== "examSelection" ? bottomRef : undefined} />
+        <div ref={activeStep !== "examSelection" ? bottomRef : undefined} />
       </div>
     </div>
   );
@@ -429,6 +587,21 @@ function User({ children }: { children: React.ReactNode }) {
     <div className="flex justify-end">
       <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-[#205ea8] px-3 py-2 text-sm leading-6 text-white">
         {children}
+      </div>
+    </div>
+  );
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex items-end gap-2" aria-label="Assistente digitando">
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#205ea8] text-[10px] font-bold text-white">
+        A
+      </div>
+      <div className="flex h-10 items-center gap-1 rounded-2xl rounded-bl-sm bg-[#f0f4fb] px-3">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#7d8da8] [animation-delay:-0.2s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#7d8da8] [animation-delay:-0.1s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#7d8da8]" />
       </div>
     </div>
   );
