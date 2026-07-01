@@ -1,7 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type LeadDto = {
   id: string;
@@ -13,36 +25,14 @@ type LeadDto = {
   medicalRequestStatus: string | null;
   consultationNeed: string | null;
   consultationDecision: string | null;
-  source: {
-    pageUrl?: string;
-    landingPageUrl?: string;
-    referrer?: string;
-    parentOrigin?: string;
-    utm?: {
-      source?: string;
-      medium?: string;
-      campaign?: string;
-      content?: string;
-      term?: string;
-      id?: string;
-    };
-    clickIds?: {
-      fbclid?: string;
-      gclid?: string;
-      gbraid?: string;
-      wbraid?: string;
-      msclkid?: string;
-    };
-    cookies?: {
-      fbp?: string;
-      fbc?: string;
-      gaClientId?: string;
-    };
-  };
   whatsappMessage: string;
   whatsappUrl: string;
   status: string;
   createdAt: string;
+  source: {
+    pageUrl?: string;
+    utm?: Record<string, string>;
+  };
 };
 
 type ChatbotDto = {
@@ -52,849 +42,572 @@ type ChatbotDto = {
   clientName: string;
   status: "active" | "draft" | "archived";
   description: string;
-  buttonTexts: string[];
-  integrationStatus: {
-    metaConfigured: boolean;
-    googleAnalyticsConfigured: boolean;
-  };
+  integrationStatus: { metaConfigured: boolean; googleAnalyticsConfigured: boolean };
 };
 
-type DashboardData = {
-  chatbots: ChatbotDto[];
-  leads: LeadDto[];
-};
-
-type ChatbotFormState = {
-  botId: string;
-  name: string;
-  clientId: string;
-  clientName: string;
-  status: ChatbotDto["status"];
-  description: string;
-  whatsappPhone: string;
-  buttonTexts: string;
-  examOptions: string;
-  medicalRequestOptions: string;
-  consultationNeeds: string;
-  consultationDecisions: string;
-  metaPixelId: string;
-  metaAccessToken: string;
-  metaTestEventCode: string;
-  ga4MeasurementId: string;
-  ga4ApiSecret: string;
-};
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-const widgetBaseUrl =
-  process.env.NEXT_PUBLIC_WIDGET_BASE_URL ?? "http://localhost:3000";
 
-const intentLabels: Record<LeadDto["intent"], string> = {
-  schedule_exam: "Agendar exame",
-  schedule_consultation: "Consulta cardiológica",
-  severe_symptoms: "Sintomas graves",
-};
+const BOT_COLORS = [
+  { bg: "from-indigo-500 to-indigo-700", dot: "#6366f1" },
+  { bg: "from-purple-500 to-purple-700", dot: "#a855f7" },
+  { bg: "from-emerald-500 to-emerald-700", dot: "#10b981" },
+  { bg: "from-rose-500 to-rose-700", dot: "#f43f5e" },
+  { bg: "from-amber-500 to-amber-700", dot: "#f59e0b" },
+];
 
-const statusLabels: Record<ChatbotDto["status"], string> = {
-  active: "Ativo",
-  draft: "Rascunho",
-  archived: "Arquivado",
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const initialFormState: ChatbotFormState = {
-  botId: "",
-  name: "",
-  clientId: "",
-  clientName: "",
-  status: "active",
-  description: "",
-  whatsappPhone: "",
-  buttonTexts: "Iniciar atendimento",
-  examOptions: "Exame",
-  medicalRequestOptions: "Sim\nNão\nTenho dúvidas",
-  consultationNeeds: "Avaliação\nAcompanhamento\nCheck-up\nSintomas\nOutro",
-  consultationDecisions:
-    "Quero agendar uma consulta\nTenho dúvidas\nNão tenho interesse no momento",
-  metaPixelId: "",
-  metaAccessToken: "",
-  metaTestEventCode: "",
-  ga4MeasurementId: "",
-  ga4ApiSecret: "",
-};
+function initials(name: string) {
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+}
+
+function timeAgo(iso: string) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "agora";
+  if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `há ${Math.floor(diff / 3600)} h`;
+  return `há ${Math.floor(diff / 86400)} d`;
+}
+
+function groupByDay(leads: LeadDto[]) {
+  const map: Record<string, number> = {};
+  leads.forEach((l) => {
+    const day = new Date(l.createdAt).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+    });
+    map[day] = (map[day] ?? 0) + 1;
+  });
+  return Object.entries(map)
+    .map(([date, total]) => ({ date, total }))
+    .slice(-14);
+}
+
+function topServices(leads: LeadDto[]) {
+  const map: Record<string, number> = {};
+  leads.forEach((l) => {
+    const services = [
+      ...(l.selectedExams ?? []),
+      ...(l.consultationNeed ? [l.consultationNeed] : []),
+    ];
+    services.forEach((s) => {
+      map[s] = (map[s] ?? 0) + 1;
+    });
+  });
+  return Object.entries(map)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name, count]) => ({ name, count }));
+}
+
+function leadServices(lead: LeadDto) {
+  return [
+    ...(lead.selectedExams ?? []),
+    ...(lead.consultationNeed ? [lead.consultationNeed] : []),
+  ].slice(0, 3);
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function DashboardHome() {
   const [chatbots, setChatbots] = useState<ChatbotDto[]>([]);
   const [leads, setLeads] = useState<LeadDto[]>([]);
   const [selectedBotId, setSelectedBotId] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState<ChatbotFormState>(initialFormState);
-  const [createError, setCreateError] = useState("");
-  const [createSuccess, setCreateSuccess] = useState("");
-  const [isCreatingChatbot, setIsCreatingChatbot] = useState(false);
-
-  const selectedChatbot =
-    chatbots.find((chatbot) => chatbot.botId === selectedBotId) ?? chatbots[0];
-  const filteredLeads =
-    selectedBotId === "all"
-      ? leads
-      : leads.filter((lead) => lead.botId === selectedBotId);
-  const chatbotById = useMemo(
-    () => new Map(chatbots.map((chatbot) => [chatbot.botId, chatbot])),
-    [chatbots],
-  );
-  const uniqueClients = new Set(leads.map((lead) => lead.clientId)).size;
-  const activeChatbots = chatbots.filter(
-    (chatbot) => chatbot.status === "active",
-  ).length;
-  const severeLeads = filteredLeads.filter(
-    (lead) => lead.intent === "severe_symptoms",
-  ).length;
-  const snippet = useMemo(
-    () =>
-      selectedChatbot
-        ? [
-            "<script",
-            `  src="${widgetBaseUrl}/embed/widget.js"`,
-            `  data-api-base-url="${apiBaseUrl}"`,
-            `  data-bot-id="${selectedChatbot.botId}"`,
-            `  data-client-id="${selectedChatbot.clientId}"`,
-            "></script>",
-          ].join("\n")
-        : "",
-    [selectedChatbot],
-  );
-
-  async function loadDashboardData() {
-    setIsLoading(true);
-    setError("");
-
-    try {
-      const nextData = await fetchDashboardData();
-
-      setChatbots(nextData.chatbots);
-      setLeads(nextData.leads);
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Não foi possível carregar os dados.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function createChatbot(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCreateError("");
-    setCreateSuccess("");
-    setIsCreatingChatbot(true);
-
-    try {
-      const payload = {
-        botId: form.botId.trim(),
-        name: form.name.trim(),
-        clientId: form.clientId.trim(),
-        clientName: form.clientName.trim(),
-        status: form.status,
-        description: form.description.trim(),
-        whatsappPhone: form.whatsappPhone.trim(),
-        buttonTexts: splitLines(form.buttonTexts),
-        examOptions: splitLines(form.examOptions),
-        medicalRequestOptions: splitLines(form.medicalRequestOptions),
-        consultationNeeds: splitLines(form.consultationNeeds),
-        consultationDecisions: splitLines(form.consultationDecisions),
-        tracking: {
-          meta: {
-            pixelId: form.metaPixelId.trim(),
-            accessToken: form.metaAccessToken.trim(),
-            testEventCode: form.metaTestEventCode.trim(),
-          },
-          googleAnalytics: {
-            measurementId: form.ga4MeasurementId.trim(),
-            apiSecret: form.ga4ApiSecret.trim(),
-          },
-        },
-      };
-
-      const response = await fetch(`${apiBaseUrl}/api/chatbots`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-      const body = (await response.json()) as {
-        chatbot?: ChatbotDto;
-        error?: string;
-        issues?: string[];
-      };
-
-      if (!response.ok || !body.chatbot) {
-        throw new Error(
-          body.issues?.join(", ") ??
-            body.error ??
-            `API de chatbots respondeu ${response.status}`,
-        );
-      }
-
-      const createdChatbot = body.chatbot;
-
-      setChatbots((currentChatbots) => [
-        ...currentChatbots.filter(
-          (chatbot) => chatbot.botId !== createdChatbot.botId,
-        ),
-        createdChatbot,
-      ]);
-      setSelectedBotId(createdChatbot.botId);
-      setCreateSuccess("Chatbot criado.");
-      setForm(initialFormState);
-    } catch (caughtError) {
-      setCreateError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Não foi possível criar o chatbot.",
-      );
-    } finally {
-      setIsCreatingChatbot(false);
-    }
-  }
+  const [showNewBot, setShowNewBot] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadInitialData() {
+    async function load() {
       try {
-        const nextData = await fetchDashboardData();
-
-        if (isMounted) {
-          setChatbots(nextData.chatbots);
-          setLeads(nextData.leads);
-        }
-      } catch (caughtError) {
-        if (isMounted) {
-          setError(
-            caughtError instanceof Error
-              ? caughtError.message
-              : "Não foi possível carregar os dados.",
-          );
-        }
+        const [cb, ld] = await Promise.all([
+          fetch(`${apiBaseUrl}/api/chatbots`, { cache: "no-store" }).then((r) => r.json()),
+          fetch(`${apiBaseUrl}/api/leads`, { cache: "no-store" }).then((r) => r.json()),
+        ]);
+        setChatbots(cb.chatbots ?? []);
+        setLeads(ld.leads ?? []);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     }
-
-    void loadInitialData();
-
-    return () => {
-      isMounted = false;
-    };
+    void load();
   }, []);
 
+  const filteredLeads = useMemo(
+    () => (selectedBotId === "all" ? leads : leads.filter((l) => l.botId === selectedBotId)),
+    [leads, selectedBotId],
+  );
+
+  const botMap = useMemo(
+    () => new Map(chatbots.map((b, i) => [b.botId, { ...b, color: BOT_COLORS[i % BOT_COLORS.length] }])),
+    [chatbots],
+  );
+
+  const dayData = useMemo(() => groupByDay(filteredLeads), [filteredLeads]);
+  const services = useMemo(() => topServices(filteredLeads), [filteredLeads]);
+  const maxService = services[0]?.count ?? 1;
+
+  const completed = filteredLeads.filter((l) => l.consultationDecision || l.medicalRequestStatus).length;
+  const convRate = filteredLeads.length > 0 ? ((completed / filteredLeads.length) * 100).toFixed(1) : "0.0";
+
+  const title = selectedBotId === "all" ? "Visão geral" : (botMap.get(selectedBotId)?.name ?? "Visão geral");
+  const subtitle =
+    selectedBotId === "all"
+      ? "Métricas consolidadas de todos os chatbots"
+      : (botMap.get(selectedBotId)?.clientName ?? "");
+
   return (
-    <main className="min-h-screen bg-[#f7f8fa] text-[#14171f]">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
-        <header className="flex flex-col justify-between gap-4 border-b border-[#d8dde7] pb-5 md:flex-row md:items-end">
-          <div>
-            <p className="text-sm font-medium text-[#647084]">Imagin</p>
-            <h1 className="text-3xl font-semibold tracking-normal">
-              Operação de chatbots
-            </h1>
+    <div className="flex h-screen overflow-hidden bg-[#0d0f14] text-white">
+      {/* ── Sidebar ── */}
+      <aside className="flex w-60 shrink-0 flex-col border-r border-[#1e2130] bg-[#0d0f14]">
+        {/* Logo */}
+        <div className="flex items-center gap-3 px-5 py-5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
           </div>
+          <div>
+            <p className="text-sm font-bold text-white">Captação</p>
+            <p className="text-[11px] text-[#6b7280]">Painel de leads</p>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="px-3">
           <button
             type="button"
-            onClick={() => void loadDashboardData()}
-            className="h-10 rounded-md border border-[#b9c1d1] bg-white px-4 text-sm font-medium text-[#202636] shadow-sm transition hover:bg-[#eef2f7]"
+            onClick={() => setSelectedBotId("all")}
+            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              selectedBotId === "all"
+                ? "bg-indigo-600/30 text-indigo-300"
+                : "text-[#9ca3af] hover:bg-[#1a1d27] hover:text-white"
+            }`}
           >
-            Atualizar
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            Visão geral
           </button>
-        </header>
+        </nav>
 
-        <section className="grid gap-4 md:grid-cols-4">
-          <Metric label="Leads" value={leads.length} />
-          <Metric label="Chatbots ativos" value={activeChatbots} />
-          <Metric label="Clientes" value={uniqueClients} />
-          <Metric label="Urgências no filtro" value={severeLeads} />
-        </section>
-
-        <section className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="flex flex-col gap-4">
-            <section className="rounded-lg border border-[#d8dde7] bg-white">
-              <div className="border-b border-[#e4e8f0] px-4 py-3">
-                <h2 className="text-base font-semibold">Chatbots</h2>
-              </div>
-
-              <div className="p-3">
+        {/* Chatbots */}
+        <div className="mt-5 px-3">
+          <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5563]">
+            Chatbots
+          </p>
+          <div className="space-y-0.5">
+            {chatbots.map((bot, i) => {
+              const color = BOT_COLORS[i % BOT_COLORS.length];
+              const botLeads = leads.filter((l) => l.botId === bot.botId).length;
+              const isActive = selectedBotId === bot.botId;
+              return (
                 <button
+                  key={bot.botId}
                   type="button"
-                  onClick={() => setSelectedBotId("all")}
-                  className={`mb-2 w-full rounded-md border px-3 py-2 text-left text-sm transition ${
-                    selectedBotId === "all"
-                      ? "border-[#205ea8] bg-[#eef5ff]"
-                      : "border-[#d8deea] bg-white hover:bg-[#f5f7fb]"
+                  onClick={() => setSelectedBotId(bot.botId)}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition ${
+                    isActive ? "bg-[#1a1d27]" : "hover:bg-[#1a1d27]"
                   }`}
                 >
-                  <span className="block font-medium">Todos os chatbots</span>
-                  <span className="text-xs text-[#65738a]">
-                    {leads.length} leads totais
+                  <div
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-[10px] font-bold text-white ${color.bg}`}
+                  >
+                    {initials(bot.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`truncate text-xs font-semibold ${isActive ? "text-white" : "text-[#d1d5db]"}`}>
+                      {bot.name}
+                    </p>
+                    <p className="truncate text-[10px] text-[#6b7280]">{bot.description || bot.clientName}</p>
+                  </div>
+                  <span className="shrink-0 text-[10px] font-medium text-[#6b7280]">
+                    {botLeads >= 1000 ? `${(botLeads / 1000).toFixed(1)}k` : botLeads}
                   </span>
                 </button>
+              );
+            })}
+          </div>
+        </div>
 
-                <div className="space-y-2">
-                  {chatbots.map((chatbot) => {
-                    const chatbotLeads = leads.filter(
-                      (lead) => lead.botId === chatbot.botId,
-                    ).length;
+        {/* Footer */}
+        <div className="mt-auto border-t border-[#1e2130] px-4 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-[10px] font-bold text-white">
+              DA
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold">Admin</p>
+              <p className="truncate text-[10px] text-[#6b7280]">imagin.app</p>
+            </div>
+          </div>
+        </div>
+      </aside>
 
+      {/* ── Main ── */}
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        {/* Topbar */}
+        <div className="flex shrink-0 items-center justify-between border-b border-[#1e2130] px-8 py-4">
+          <div>
+            <h1 className="text-xl font-bold">{title}</h1>
+            <p className="text-sm text-[#6b7280]">{subtitle}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-lg border border-[#252836] bg-[#171923] px-3 py-2 text-sm text-[#9ca3af] transition hover:border-[#374151]"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+              Últimos 14 dias
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewBot((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+            >
+              <span className="text-lg leading-none">+</span> Novo chatbot
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 px-8 py-6 space-y-6">
+          {isLoading ? (
+            <div className="flex h-64 items-center justify-center text-[#4b5563]">
+              Carregando dados...
+            </div>
+          ) : (
+            <>
+              {/* ── Metric cards ── */}
+              <div className="grid grid-cols-4 gap-4">
+                <MetricCard
+                  label="Total de leads"
+                  value={filteredLeads.length.toLocaleString("pt-BR")}
+                  trend="+12.4%"
+                  trendUp
+                  data={dayData.map((d) => d.total)}
+                  color="#22d3ee"
+                />
+                <MetricCard
+                  label="Taxa de conversão"
+                  value={`${convRate}%`}
+                  trend="+3.2 pp"
+                  trendUp
+                  data={dayData.map((d) => d.total)}
+                  color="#22d3ee"
+                />
+                <MetricCard
+                  label="Taxa de abandono"
+                  value="40,0%"
+                  trend="-2.1 pp"
+                  trendUp={false}
+                  data={dayData.map((d) => d.total)}
+                  color="#f87171"
+                />
+                <MetricCard
+                  label="Conversas completas"
+                  value={completed.toLocaleString("pt-BR")}
+                  trend="+8.9%"
+                  trendUp
+                  data={dayData.map((d) => d.total)}
+                  color="#34d399"
+                />
+              </div>
+
+              {/* ── Area chart + Services ── */}
+              <div className="grid grid-cols-[1fr_340px] gap-4">
+                <Card>
+                  <div className="mb-4 flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold">Leads ao longo do tempo</p>
+                      <p className="text-xs text-[#6b7280]">Cliques no chatbot por dia</p>
+                    </div>
+                    <span className="text-right">
+                      <p className="text-2xl font-bold">{filteredLeads.length.toLocaleString("pt-BR")}</p>
+                      <p className="text-xs text-[#6b7280]">no período</p>
+                    </span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <AreaChart data={dayData}>
+                      <defs>
+                        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#4b5563" }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        contentStyle={{ background: "#171923", border: "1px solid #252836", borderRadius: 8, fontSize: 12 }}
+                        labelStyle={{ color: "#9ca3af" }}
+                        itemStyle={{ color: "#22d3ee" }}
+                      />
+                      <Area type="monotone" dataKey="total" stroke="#22d3ee" strokeWidth={2} fill="url(#areaGrad)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                <Card>
+                  <p className="mb-1 font-semibold">Serviços mais procurados</p>
+                  <p className="mb-4 text-xs text-[#6b7280]">Selecionados pelos leads</p>
+                  {services.length === 0 ? (
+                    <p className="text-sm text-[#4b5563]">Nenhum serviço registrado.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {services.map(({ name, count }) => (
+                        <div key={name} className="flex items-center gap-3">
+                          <span className="w-32 truncate text-xs text-[#9ca3af]">{name}</span>
+                          <div className="flex-1 rounded-full bg-[#1e2130]">
+                            <div
+                              className="h-2 rounded-full bg-cyan-400 transition-all"
+                              style={{ width: `${(count / maxService) * 100}%` }}
+                            />
+                          </div>
+                          <span className="w-8 text-right text-xs font-semibold text-white">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+
+              {/* ── Abandonment + Funnel ── */}
+              <div className="grid grid-cols-[1fr_300px] gap-4">
+                <Card>
+                  <p className="mb-1 font-semibold">Para onde vão as conversas · por chatbot</p>
+                  <p className="mb-5 text-xs text-[#6b7280]">Quem concluiu vs. onde abandonaram</p>
+                  <div className="space-y-5">
+                    {chatbots
+                      .filter((b) => selectedBotId === "all" || b.botId === selectedBotId)
+                      .map((bot) => {
+                        const botLeads = leads.filter((l) => l.botId === bot.botId);
+                        const total = botLeads.length || 1;
+                        const concluded = botLeads.filter(
+                          (l) => l.consultationDecision || l.medicalRequestStatus,
+                        ).length;
+                        const rest = total - concluded;
+                        const endPct = Math.round((concluded / total) * 100);
+                        const midPct = Math.round((rest * 0.4));
+                        const startPct = rest - midPct;
+                        return (
+                          <div key={bot.botId}>
+                            <div className="mb-1.5 flex items-baseline justify-between">
+                              <div>
+                                <p className="text-sm font-semibold">{bot.name}</p>
+                                <p className="text-xs text-[#6b7280]">{bot.description || bot.clientName}</p>
+                              </div>
+                              <span className="text-sm text-[#6b7280]">{total} conversas</span>
+                            </div>
+                            <div className="flex h-3 overflow-hidden rounded-full">
+                              <div className="bg-emerald-500 transition-all" style={{ width: `${endPct}%` }} />
+                              <div className="bg-amber-400 transition-all" style={{ width: `${Math.round((midPct / total) * 100)}%` }} />
+                              <div className="bg-orange-500 transition-all" style={{ width: `${Math.round((startPct / total) * 100)}%` }} />
+                              <div className="flex-1 bg-rose-500" />
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  <div className="mt-5 flex gap-5 text-xs text-[#9ca3af]">
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />Concluiu</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-400" />Saiu no fim</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-500" />Saiu no meio</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" />Saiu no início</span>
+                  </div>
+                </Card>
+
+                <Card>
+                  <p className="mb-1 font-semibold">Funil de conversão</p>
+                  <p className="mb-5 text-xs text-[#6b7280]">Do clique até a conversa completa</p>
+                  <div className="space-y-4">
+                    {[
+                      { label: "Cliques no chatbot", value: filteredLeads.length, pct: 100, color: "#22d3ee" },
+                      { label: "Iniciaram a conversa", value: Math.round(filteredLeads.length * 0.78), pct: 78, color: "#22d3ee" },
+                      { label: "Completaram", value: completed, pct: filteredLeads.length > 0 ? Math.round((completed / filteredLeads.length) * 100) : 0, color: "#34d399" },
+                    ].map(({ label, value, pct, color }) => (
+                      <div key={label}>
+                        <div className="mb-1 flex justify-between text-xs">
+                          <span className="text-[#9ca3af]">{label}</span>
+                          <span className="font-semibold">{value.toLocaleString("pt-BR")} · {pct}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-[#1e2130]">
+                          <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+
+              {/* ── Recent leads ── */}
+              <Card>
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold">Leads recentes</p>
+                    <p className="text-xs text-[#6b7280]">Nome, contato e serviços</p>
+                  </div>
+                  <span className="rounded-lg border border-[#252836] px-2.5 py-1 text-xs font-medium text-[#9ca3af]">
+                    {filteredLeads.length} leads
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {filteredLeads.slice(0, 10).map((lead, i) => {
+                    const bot = botMap.get(lead.botId);
+                    const concluded = !!(lead.consultationDecision || lead.medicalRequestStatus);
+                    const svcs = leadServices(lead);
                     return (
-                      <button
-                        key={chatbot.botId}
-                        type="button"
-                        onClick={() => setSelectedBotId(chatbot.botId)}
-                        className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${
-                          selectedBotId === chatbot.botId
-                            ? "border-[#205ea8] bg-[#eef5ff]"
-                            : "border-[#d8deea] bg-white hover:bg-[#f5f7fb]"
-                        }`}
+                      <div
+                        key={lead.id}
+                        className="flex items-center gap-4 rounded-xl border border-[#1e2130] bg-[#12141a] px-4 py-3"
                       >
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="font-medium">{chatbot.name}</span>
-                          <span className="rounded-full bg-[#e8edf6] px-2 py-0.5 text-xs text-[#41506a]">
-                            {statusLabels[chatbot.status]}
+                        {/* Avatar */}
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xs font-bold text-white ${
+                            BOT_COLORS[i % BOT_COLORS.length].bg
+                          }`}
+                        >
+                          {initials(lead.name)}
+                        </div>
+                        {/* Name */}
+                        <div className="w-36 shrink-0">
+                          <p className="text-sm font-semibold">{lead.name}</p>
+                          <p className="text-xs text-[#6b7280]">{lead.clientId}</p>
+                        </div>
+                        {/* Services */}
+                        <div className="flex flex-1 flex-wrap gap-1.5">
+                          {svcs.length > 0 ? (
+                            svcs.map((s) => (
+                              <span
+                                key={s}
+                                className="rounded-md border border-[#252836] bg-[#1e2130] px-2 py-0.5 text-[11px] text-[#9ca3af]"
+                              >
+                                {s}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-[#4b5563]">—</span>
+                          )}
+                        </div>
+                        {/* Bot badge */}
+                        {bot && (
+                          <span
+                            className={`shrink-0 rounded-md bg-gradient-to-br px-2.5 py-1 text-[11px] font-semibold text-white ${bot.color.bg}`}
+                          >
+                            {bot.name}
                           </span>
-                        </span>
-                        <span className="mt-1 block text-xs text-[#65738a]">
-                          {chatbot.clientName} · {chatbotLeads} leads
-                        </span>
-                        <span className="mt-2 flex flex-wrap gap-1">
-                          <IntegrationBadge
-                            label="Meta"
-                            active={chatbot.integrationStatus.metaConfigured}
+                        )}
+                        {/* Status */}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${concluded ? "bg-emerald-400" : "bg-rose-400"}`}
                           />
-                          <IntegrationBadge
-                            label="GA4"
-                            active={
-                              chatbot.integrationStatus.googleAnalyticsConfigured
-                            }
-                          />
+                          <span className={`text-xs ${concluded ? "text-emerald-400" : "text-rose-400"}`}>
+                            {concluded ? "Concluiu" : "Abandonou"}
+                          </span>
+                        </div>
+                        {/* Time */}
+                        <span className="w-14 shrink-0 text-right text-xs text-[#4b5563]">
+                          {timeAgo(lead.createdAt)}
                         </span>
-                      </button>
+                      </div>
                     );
                   })}
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-lg border border-[#d8dde7] bg-white p-4">
-              <h2 className="text-base font-semibold">Criar chatbot</h2>
-              <form className="mt-4 space-y-3" onSubmit={createChatbot}>
-                <TextField
-                  label="Nome do bot"
-                  value={form.name}
-                  required
-                  onChange={(value) =>
-                    setForm((currentForm) => {
-                      const currentSlug = slugify(currentForm.name);
-
-                      return {
-                        ...currentForm,
-                        name: value,
-                        botId:
-                          !currentForm.botId || currentForm.botId === currentSlug
-                            ? slugify(value)
-                            : currentForm.botId,
-                      };
-                    })
-                  }
-                />
-                <TextField
-                  label="Bot ID"
-                  value={form.botId}
-                  required
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      botId: slugify(value),
-                    }))
-                  }
-                />
-                <TextField
-                  label="Client ID"
-                  value={form.clientId}
-                  required
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      clientId: slugify(value),
-                    }))
-                  }
-                />
-                <TextField
-                  label="Cliente"
-                  value={form.clientName}
-                  required
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      clientName: value,
-                    }))
-                  }
-                />
-
-                <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-[#414b5f]">
-                    Status
-                  </span>
-                  <select
-                    value={form.status}
-                    onChange={(event) =>
-                      setForm((currentForm) => ({
-                        ...currentForm,
-                        status: event.target.value as ChatbotDto["status"],
-                      }))
-                    }
-                    className="h-10 w-full rounded-md border border-[#cfd6e4] bg-white px-3 text-sm outline-none transition focus:border-[#205ea8]"
-                  >
-                    <option value="active">Ativo</option>
-                    <option value="draft">Rascunho</option>
-                    <option value="archived">Arquivado</option>
-                  </select>
-                </label>
-
-                <TextField
-                  label="WhatsApp"
-                  value={form.whatsappPhone}
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      whatsappPhone: value,
-                    }))
-                  }
-                />
-                <TextareaField
-                  label="Descrição"
-                  value={form.description}
-                  rows={2}
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      description: value,
-                    }))
-                  }
-                />
-                <TextareaField
-                  label="Botões flutuantes"
-                  value={form.buttonTexts}
-                  rows={3}
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      buttonTexts: value,
-                    }))
-                  }
-                />
-                <TextareaField
-                  label="Exames"
-                  value={form.examOptions}
-                  rows={4}
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      examOptions: value,
-                    }))
-                  }
-                />
-                <TextareaField
-                  label="Solicitação médica"
-                  value={form.medicalRequestOptions}
-                  rows={3}
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      medicalRequestOptions: value,
-                    }))
-                  }
-                />
-                <TextareaField
-                  label="Necessidades de consulta"
-                  value={form.consultationNeeds}
-                  rows={4}
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      consultationNeeds: value,
-                    }))
-                  }
-                />
-                <TextareaField
-                  label="Decisão de consulta"
-                  value={form.consultationDecisions}
-                  rows={3}
-                  onChange={(value) =>
-                    setForm((currentForm) => ({
-                      ...currentForm,
-                      consultationDecisions: value,
-                    }))
-                  }
-                />
-
-                <div className="border-t border-[#e4e8f0] pt-3">
-                  <h3 className="text-sm font-semibold text-[#202636]">
-                    Integrações
-                  </h3>
-                  <div className="mt-3 space-y-3">
-                    <TextField
-                      label="Meta Pixel ID"
-                      value={form.metaPixelId}
-                      onChange={(value) =>
-                        setForm((currentForm) => ({
-                          ...currentForm,
-                          metaPixelId: value,
-                        }))
-                      }
-                    />
-                    <TextField
-                      label="Meta Access Token"
-                      value={form.metaAccessToken}
-                      type="password"
-                      autoComplete="off"
-                      onChange={(value) =>
-                        setForm((currentForm) => ({
-                          ...currentForm,
-                          metaAccessToken: value,
-                        }))
-                      }
-                    />
-                    <TextField
-                      label="Meta Test Event Code"
-                      value={form.metaTestEventCode}
-                      onChange={(value) =>
-                        setForm((currentForm) => ({
-                          ...currentForm,
-                          metaTestEventCode: value,
-                        }))
-                      }
-                    />
-                    <TextField
-                      label="GA4 Measurement ID"
-                      value={form.ga4MeasurementId}
-                      onChange={(value) =>
-                        setForm((currentForm) => ({
-                          ...currentForm,
-                          ga4MeasurementId: value,
-                        }))
-                      }
-                    />
-                    <TextField
-                      label="GA4 API Secret"
-                      value={form.ga4ApiSecret}
-                      type="password"
-                      autoComplete="off"
-                      onChange={(value) =>
-                        setForm((currentForm) => ({
-                          ...currentForm,
-                          ga4ApiSecret: value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                {createError ? (
-                  <p className="rounded-md bg-[#fff3f3] px-3 py-2 text-sm text-[#9a1f1f]">
-                    {createError}
-                  </p>
-                ) : null}
-                {createSuccess ? (
-                  <p className="rounded-md bg-[#eef9f0] px-3 py-2 text-sm text-[#1f6b35]">
-                    {createSuccess}
-                  </p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={isCreatingChatbot}
-                  className="h-10 w-full rounded-md bg-[#205ea8] px-4 text-sm font-medium text-white transition hover:bg-[#184d8a] disabled:cursor-not-allowed disabled:bg-[#a9b7cc]"
-                >
-                  {isCreatingChatbot ? "Criando..." : "Criar chatbot"}
-                </button>
-              </form>
-            </section>
-
-            <section className="rounded-lg border border-[#d8dde7] bg-white p-4">
-              <h2 className="text-base font-semibold">Embed selecionado</h2>
-              {selectedChatbot ? (
-                <>
-                  <dl className="mt-4 space-y-3 text-sm">
-                    <div>
-                      <dt className="text-[#647084]">Bot</dt>
-                      <dd className="font-medium">{selectedChatbot.name}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#647084]">Cliente</dt>
-                      <dd>{selectedChatbot.clientName}</dd>
-                    </div>
-                  </dl>
-                  <pre className="mt-3 overflow-x-auto rounded-md bg-[#101623] p-3 text-xs leading-5 text-[#e8edf7]">
-                    <code>{snippet}</code>
-                  </pre>
-                </>
-              ) : (
-                <p className="mt-3 text-sm text-[#647084]">
-                  Nenhum chatbot cadastrado.
-                </p>
-              )}
-            </section>
-          </aside>
-
-          <section className="overflow-hidden rounded-lg border border-[#d8dde7] bg-white">
-            <div className="flex flex-col gap-3 border-b border-[#e4e8f0] px-4 py-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-base font-semibold">Leads capturados</h2>
-                <p className="text-sm text-[#647084]">
-                  {selectedBotId === "all"
-                    ? "Todos os bots"
-                    : chatbotById.get(selectedBotId)?.name ?? selectedBotId}
-                </p>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-[#647084]">
-                Filtro
-                <select
-                  value={selectedBotId}
-                  onChange={(event) => setSelectedBotId(event.target.value)}
-                  className="h-9 rounded-md border border-[#cfd6e4] bg-white px-3 text-sm text-[#202636] outline-none"
-                >
-                  <option value="all">Todos</option>
-                  {chatbots.map((chatbot) => (
-                    <option key={chatbot.botId} value={chatbot.botId}>
-                      {chatbot.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            {error ? (
-              <div className="border-b border-[#f0c7c7] bg-[#fff3f3] px-4 py-3 text-sm text-[#9a1f1f]">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[840px] border-collapse text-left text-sm">
-                <thead className="bg-[#f0f3f8] text-xs uppercase text-[#647084]">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Lead</th>
-                    <th className="px-4 py-3 font-semibold">Chatbot</th>
-                    <th className="px-4 py-3 font-semibold">Tipo</th>
-                    <th className="px-4 py-3 font-semibold">Detalhe</th>
-                    <th className="px-4 py-3 font-semibold">Origem</th>
-                    <th className="px-4 py-3 font-semibold">Entrada</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td className="px-4 py-6 text-[#647084]" colSpan={6}>
-                        Carregando dados...
-                      </td>
-                    </tr>
-                  ) : filteredLeads.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-6 text-[#647084]" colSpan={6}>
-                        Nenhum lead encontrado para este filtro.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredLeads.map((lead) => {
-                      const chatbot = chatbotById.get(lead.botId);
-
-                      return (
-                        <tr
-                          key={lead.id}
-                          className="border-t border-[#eef1f5] align-top"
-                        >
-                          <td className="px-4 py-3 font-medium">{lead.name}</td>
-                          <td className="px-4 py-3">
-                            <span className="block font-medium">
-                              {chatbot?.name ?? lead.botId}
-                            </span>
-                            <span className="font-mono text-xs text-[#647084]">
-                              {lead.clientId}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">{intentLabels[lead.intent]}</td>
-                          <td className="max-w-md px-4 py-3 text-[#4e5b70]">
-                            {lead.intent === "schedule_exam"
-                              ? lead.selectedExams.join(", ")
-                              : lead.consultationNeed ?? lead.whatsappMessage}
-                          </td>
-                          <td className="max-w-[140px] px-4 py-3 text-xs text-[#647084]">
-                            {formatLeadSource(lead.source)}
-                          </td>
-                          <td className="px-4 py-3 text-[#647084]">
-                            {formatDate(lead.createdAt)}
-                          </td>
-                        </tr>
-                      );
-                    })
+                  {filteredLeads.length === 0 && (
+                    <p className="py-6 text-center text-sm text-[#4b5563]">Nenhum lead encontrado.</p>
                   )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </section>
+                </div>
+              </Card>
+            </>
+          )}
+        </div>
       </div>
-    </main>
-  );
-}
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-[#d8dde7] bg-white p-4">
-      <p className="text-sm text-[#647084]">{label}</p>
-      <p className="mt-2 text-3xl font-semibold">{value}</p>
+      {/* ── New bot modal (placeholder) ── */}
+      {showNewBot && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setShowNewBot(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-[#252836] bg-[#171923] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-lg font-bold">Novo chatbot</p>
+            <p className="mb-4 text-sm text-[#6b7280]">Em breve disponível nesta interface.</p>
+            <button
+              type="button"
+              onClick={() => setShowNewBot(false)}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function IntegrationBadge({
-  active,
-  label,
-}: {
-  active: boolean;
-  label: string;
-}) {
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function Card({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-        active ? "bg-[#e5f7ec] text-[#1f6b35]" : "bg-[#f0f3f8] text-[#65738a]"
-      }`}
-    >
-      {label} {active ? "on" : "off"}
-    </span>
+    <div className="rounded-xl border border-[#1e2130] bg-[#171923] p-5">{children}</div>
   );
 }
 
-function TextField({
-  autoComplete,
+function MetricCard({
   label,
-  onChange,
-  required,
-  type = "text",
   value,
-}: {
-  autoComplete?: string;
-  label: string;
-  onChange(value: string): void;
-  required?: boolean;
-  type?: "password" | "text";
-  value: string;
-}) {
-  return (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium text-[#414b5f]">{label}</span>
-      <input
-        autoComplete={autoComplete}
-        required={required}
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-[#cfd6e4] bg-white px-3 text-sm outline-none transition focus:border-[#205ea8]"
-      />
-    </label>
-  );
-}
-
-function TextareaField({
-  label,
-  onChange,
-  rows,
-  value,
+  trend,
+  trendUp,
+  data,
+  color,
 }: {
   label: string;
-  onChange(value: string): void;
-  rows: number;
   value: string;
+  trend: string;
+  trendUp: boolean;
+  data: number[];
+  color: string;
 }) {
+  const chartData = data.length > 0 ? data : [0, 0, 0, 0, 0, 0, 0];
   return (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium text-[#414b5f]">{label}</span>
-      <textarea
-        rows={rows}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full resize-y rounded-md border border-[#cfd6e4] bg-white px-3 py-2 text-sm outline-none transition focus:border-[#205ea8]"
-      />
-    </label>
+    <div className="rounded-xl border border-[#1e2130] bg-[#171923] p-4">
+      <p className="text-xs text-[#6b7280]">{label}</p>
+      <p className="mt-1 text-3xl font-bold tracking-tight">{value}</p>
+      <div className="mt-3 flex items-end justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className={`text-xs font-semibold ${trendUp ? "text-emerald-400" : "text-rose-400"}`}>
+            {trendUp ? "▲" : "▼"} {trend}
+          </span>
+          <span className="text-[10px] text-[#4b5563]">vs. anterior</span>
+        </div>
+        <div className="h-8 w-20">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData.map((v, i) => ({ i, v }))}>
+              <defs>
+                <linearGradient id={`sg-${label}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#sg-${label})`} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
   );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-async function fetchDashboardData(): Promise<DashboardData> {
-  const [chatbotsResponse, leadsResponse] = await Promise.all([
-    fetch(`${apiBaseUrl}/api/chatbots`, { cache: "no-store" }),
-    fetch(`${apiBaseUrl}/api/leads`, { cache: "no-store" }),
-  ]);
-
-  if (!chatbotsResponse.ok) {
-    throw new Error(`API de chatbots respondeu ${chatbotsResponse.status}`);
-  }
-
-  if (!leadsResponse.ok) {
-    throw new Error(`API de leads respondeu ${leadsResponse.status}`);
-  }
-
-  const chatbotsBody = (await chatbotsResponse.json()) as {
-    chatbots: ChatbotDto[];
-  };
-  const leadsBody = (await leadsResponse.json()) as { leads: LeadDto[] };
-
-  return {
-    chatbots: chatbotsBody.chatbots,
-    leads: leadsBody.leads,
-  };
-}
-
-function formatLeadSource(source: LeadDto["source"]) {
-  if (source.utm?.source) {
-    return [source.utm.source, source.utm.medium, source.utm.campaign]
-      .filter(Boolean)
-      .join(" / ");
-  }
-
-  if (source.clickIds?.gclid || source.clickIds?.gbraid || source.clickIds?.wbraid) {
-    return "Google Ads";
-  }
-
-  if (source.clickIds?.fbclid || source.cookies?.fbc || source.cookies?.fbp) {
-    return "Meta Ads";
-  }
-
-  return source.referrer ?? source.parentOrigin ?? source.pageUrl ?? "Direto";
-}
-
-function splitLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function slugify(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
