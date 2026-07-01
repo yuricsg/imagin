@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import path from "node:path";
 import { toPublicChatbotConfig } from "./chatbots/catalog.js";
-import { FileChatbotRepository } from "./chatbots/file-chatbot-repository.js";
-import { FileLeadRepository } from "./leads/file-lead-repository.js";
+import { PrismaChatbotRepository } from "./chatbots/prisma-chatbot-repository.js";
+import { PrismaLeadRepository } from "./leads/prisma-lead-repository.js";
+import { prisma } from "./db.js";
 import {
   buildLeadRecordInput,
   leadToDto,
@@ -31,16 +31,9 @@ const defaultCorsOrigins = [
 
 export function createApp(options: AppOptions = {}) {
   const chatbotRepository =
-    options.chatbotRepository ??
-    new FileChatbotRepository(
-      process.env.CHATBOTS_FILE_PATH ??
-        path.join(process.cwd(), "data", "chatbots.json"),
-    );
+    options.chatbotRepository ?? new PrismaChatbotRepository(prisma);
   const leadRepository =
-    options.leadRepository ??
-    new FileLeadRepository(
-      process.env.LEADS_FILE_PATH ?? path.join(process.cwd(), "data", "leads.json"),
-    );
+    options.leadRepository ?? new PrismaLeadRepository(prisma);
   const corsOrigins = options.corsOrigins ?? readCorsOrigins();
   const trackingService = options.trackingService ?? createTrackingService();
   const app = new Hono();
