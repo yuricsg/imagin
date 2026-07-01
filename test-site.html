@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Site de Teste — Clínica Renata Reis</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; color: #1a1a2e; }
+    header { background: #205ea8; color: white; padding: 20px 40px; }
+    header h1 { margin: 0; font-size: 24px; }
+    main { max-width: 860px; margin: 60px auto; padding: 0 24px; }
+    h2 { font-size: 28px; margin-bottom: 12px; }
+    p { color: #555; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Clínica Cardiológica Renata Reis</h1>
+  </header>
+  <main>
+    <h2>Agende sua consulta ou exame</h2>
+    <p>
+      Oferecemos atendimento cardiológico completo, com exames como ecocardiograma,
+      teste ergométrico, Holter 24h e muito mais. Clique no botão no canto da tela
+      para falar com nosso assistente.
+    </p>
+    <p>
+      Nossa clínica conta com profissionais especializados e equipamentos modernos
+      para cuidar da sua saúde cardiovascular.
+    </p>
+  </main>
+
+  <!-- Widget do chatbot -->
+  <script
+    src="http://localhost:3000/embed/widget.js"
+    data-bot-id="dra-renata-reis"
+    data-client-id="clinica-renata"
+    data-api-base-url="http://localhost:4000"
+    data-app-origin="http://localhost:3000"
+  ></script>
+</body>
+</html>
