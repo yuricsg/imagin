@@ -63,6 +63,18 @@ export class PrismaChatbotRepository implements ChatbotRepository {
         ...(input.status !== undefined && { status: normalizeStatus(input.status) }),
         ...(input.description !== undefined && { description: input.description }),
         ...(input.whatsappPhone !== undefined && { whatsappPhone: input.whatsappPhone }),
+        ...(input.flowKey !== undefined && {
+          flowKey: getConversationFlow(input.flowKey).key,
+        }),
+        ...(input.examOptions !== undefined && {
+          examOptions: normalizeList(input.examOptions, defaultExamOptions),
+        }),
+        ...(input.consultationNeeds !== undefined && {
+          consultationNeeds: normalizeList(
+            input.consultationNeeds,
+            defaultConsultationNeeds,
+          ),
+        }),
         ...(input.dashboardConfig !== undefined && {
           dashboardConfig: input.dashboardConfig as Prisma.InputJsonValue,
         }),

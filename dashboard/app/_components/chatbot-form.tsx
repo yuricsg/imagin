@@ -11,10 +11,14 @@ import {
   FLOW_TEMPLATES,
   FLOW_TEMPLATE_ORDER,
   FLOW_TONE_LABELS,
+  INSURANCE_MODE_LABELS,
+  INSURANCE_MODE_ORDER,
+  MEDICAL_SPECIALTIES,
   suggestTemplateForSpecialty,
   type FlowFieldKey,
   type FlowTemplateId,
   type FlowTone,
+  type InsuranceMode,
 } from "@/lib/chatbots/flows";
 import {
   validateChatbotInput,
@@ -41,25 +45,20 @@ const ACCENT_LABELS: Record<AccentKey, string> = {
   rose: "Rosa",
 };
 
-const SPECIALTY_SUGGESTIONS = [
-  "Captação de pacientes — Dermatologia",
-  "Agendamento — Clínica odontológica",
-  "Captação de leads — Imobiliária",
-  "Atendimento — Advocacia",
-];
+const SPECIALTY_SUGGESTIONS = MEDICAL_SPECIALTIES;
 
 const STEPS = [
   {
-    title: "Sobre o bot",
-    description: "Conte para quem é o chatbot. Sem termos técnicos.",
+    title: "Sobre a clínica",
+    description: "Nome do assistente, clínica e especialidade médica.",
   },
   {
-    title: "Conversa",
-    description: "Escolha o modelo e veja como o visitante vai ser atendido.",
+    title: "Atendimento",
+    description: "Serviços oferecidos, convênios e como o paciente é atendido.",
   },
   {
     title: "WhatsApp",
-    description: "Opcional: leve o visitante para continuar no WhatsApp.",
+    description: "Opcional: leve o paciente para continuar no WhatsApp.",
   },
   {
     title: "Aparência",
@@ -125,6 +124,20 @@ export function ChatbotForm({
         ? [...seed.flowCollectFields]
         : [...FLOW_TEMPLATES["patient-capture"].defaultCollectFields],
   );
+  const [flowServices, setFlowServices] = useState<string[]>(
+    () =>
+      seed?.flowServices && seed.flowServices.length > 0
+        ? [...seed.flowServices]
+        : [...FLOW_TEMPLATES["patient-capture"].defaultServices],
+  );
+  const [newService, setNewService] = useState("");
+  const [flowInsuranceMode, setFlowInsuranceMode] = useState<InsuranceMode>(
+    seed?.flowInsuranceMode ?? "both",
+  );
+  const [flowInsurances, setFlowInsurances] = useState<string[]>(
+    () => (seed?.flowInsurances ? [...seed.flowInsurances] : []),
+  );
+  const [newInsurance, setNewInsurance] = useState("");
   const [gaMeasurementId, setGaMeasurementId] = useState(
     seed?.gaMeasurementId ?? "",
   );
@@ -210,6 +223,9 @@ export function ChatbotForm({
       flowTone,
       flowGreeting,
       flowCollectFields,
+      flowServices,
+      flowInsuranceMode,
+      flowInsurances,
       gaMeasurementId,
       metaPixelId,
       whatsappEnabled,
@@ -257,6 +273,7 @@ export function ChatbotForm({
     const template = FLOW_TEMPLATES[suggested];
     setFlowTemplateId(suggested);
     setFlowCollectFields([...template.defaultCollectFields]);
+    setFlowServices([...template.defaultServices]);
     setFlowGreeting("");
     lastSyncedSpecialty.current = nextSpecialty.trim();
   }
@@ -265,8 +282,39 @@ export function ChatbotForm({
     const template = FLOW_TEMPLATES[id];
     setFlowTemplateId(id);
     setFlowCollectFields([...template.defaultCollectFields]);
+    setFlowServices([...template.defaultServices]);
     setFlowGreeting("");
     clearFieldError("flowTemplateId");
+  }
+
+  function addService() {
+    const value = newService.trim();
+    if (!value) return;
+    setFlowServices((prev) =>
+      prev.some((s) => s.toLowerCase() === value.toLowerCase())
+        ? prev
+        : [...prev, value],
+    );
+    setNewService("");
+  }
+
+  function removeService(service: string) {
+    setFlowServices((prev) => prev.filter((s) => s !== service));
+  }
+
+  function addInsurance() {
+    const value = newInsurance.trim();
+    if (!value) return;
+    setFlowInsurances((prev) =>
+      prev.some((s) => s.toLowerCase() === value.toLowerCase())
+        ? prev
+        : [...prev, value],
+    );
+    setNewInsurance("");
+  }
+
+  function removeInsurance(insurance: string) {
+    setFlowInsurances((prev) => prev.filter((s) => s !== insurance));
   }
 
   function toggleCollectField(field: FlowFieldKey) {
@@ -365,6 +413,9 @@ export function ChatbotForm({
       tone: flowTone,
       greeting: flowGreeting,
       collectFields: flowCollectFields,
+      services: flowServices,
+      insuranceMode: flowInsuranceMode,
+      insurances: flowInsurances,
     },
     { botName: name, clientName },
   );
@@ -445,7 +496,7 @@ export function ChatbotForm({
                       {isDone ? <IconCheck className="size-4" /> : index + 1}
                     </span>
                     <span
-                      className={`truncate text-sm ${
+                      className={`whitespace-nowrap text-sm ${
                         isCurrent
                           ? "font-semibold text-zinc-900 dark:text-zinc-100"
                           : "hidden font-medium text-zinc-400 dark:text-zinc-500 sm:inline"
@@ -543,7 +594,7 @@ export function ChatbotForm({
                   </Field>
 
                   <Field
-                    label="O que o bot faz?"
+                    label="Especialidade / área médica"
                     required
                     error={fieldErrors.specialty}
                     htmlFor={`${formId}-specialty`}
@@ -556,7 +607,7 @@ export function ChatbotForm({
                         setSpecialty(e.target.value);
                         clearFieldError("specialty");
                       }}
-                      placeholder="Ex.: Captação de pacientes — Dermatologia"
+                      placeholder="Ex.: Cardiologia"
                       aria-invalid={Boolean(fieldErrors.specialty)}
                       aria-describedby={
                         fieldErrors.specialty
@@ -627,6 +678,135 @@ export function ChatbotForm({
                       <p className="text-xs text-rose-600 dark:text-rose-400">
                         {fieldErrors.flowTemplateId}
                       </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                      Serviços oferecidos
+                    </span>
+                    <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      Consultas, exames ou procedimentos da clínica. O paciente
+                      escolhe entre eles na conversa.
+                    </p>
+                    {flowServices.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {flowServices.map((service) => (
+                          <span
+                            key={service}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white/70 py-1 pl-3 pr-1.5 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200"
+                          >
+                            {service}
+                            <button
+                              type="button"
+                              onClick={() => removeService(service)}
+                              aria-label={`Remover ${service}`}
+                              className="flex size-5 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+                            >
+                              <IconX className="size-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Adicione ao menos um serviço para o paciente escolher.
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        value={newService}
+                        onChange={(e) => setNewService(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addService();
+                          }
+                        }}
+                        placeholder="Ex.: Ecocardiograma"
+                        className={inputClass(false)}
+                      />
+                      <button
+                        type="button"
+                        onClick={addService}
+                        disabled={!newService.trim()}
+                        className="shrink-0 rounded-xl border border-zinc-200 px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        Adicionar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                      Convênios
+                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {INSURANCE_MODE_ORDER.map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setFlowInsuranceMode(mode)}
+                          aria-pressed={flowInsuranceMode === mode}
+                          className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 sm:text-sm ${
+                            flowInsuranceMode === mode
+                              ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-200"
+                              : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
+                          }`}
+                        >
+                          {INSURANCE_MODE_LABELS[mode]}
+                        </button>
+                      ))}
+                    </div>
+                    {flowInsuranceMode !== "particular" ? (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                          Convênios aceitos (opcional). Ajuda o paciente a saber
+                          se o plano dele é atendido.
+                        </p>
+                        {flowInsurances.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {flowInsurances.map((insurance) => (
+                              <span
+                                key={insurance}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white/70 py-1 pl-3 pr-1.5 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200"
+                              >
+                                {insurance}
+                                <button
+                                  type="button"
+                                  onClick={() => removeInsurance(insurance)}
+                                  aria-label={`Remover ${insurance}`}
+                                  className="flex size-5 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+                                >
+                                  <IconX className="size-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="flex gap-2">
+                          <input
+                            value={newInsurance}
+                            onChange={(e) => setNewInsurance(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                addInsurance();
+                              }
+                            }}
+                            placeholder="Ex.: Unimed, Bradesco Saúde"
+                            className={inputClass(false)}
+                          />
+                          <button
+                            type="button"
+                            onClick={addInsurance}
+                            disabled={!newInsurance.trim()}
+                            className="shrink-0 rounded-xl border border-zinc-200 px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            Adicionar
+                          </button>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
 
@@ -951,6 +1131,26 @@ export function ChatbotForm({
                       value={flowCollectFields
                         .map((f) => FLOW_FIELD_LABELS[f])
                         .join(", ")}
+                    />
+                    <ReviewRow
+                      label="Serviços"
+                      value={
+                        flowServices.length > 0
+                          ? flowServices.join(", ")
+                          : "—"
+                      }
+                    />
+                    <ReviewRow
+                      label="Convênios"
+                      value={
+                        flowInsuranceMode === "particular"
+                          ? INSURANCE_MODE_LABELS.particular
+                          : `${INSURANCE_MODE_LABELS[flowInsuranceMode]}${
+                              flowInsurances.length > 0
+                                ? ` (${flowInsurances.join(", ")})`
+                                : ""
+                            }`
+                      }
                     />
                     <ReviewRow
                       label="WhatsApp"

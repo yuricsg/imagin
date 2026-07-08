@@ -14,6 +14,7 @@ function makeData(): DashboardData {
     leads: [],
     metrics: computeMetrics([], [], NOW_MS),
     botActivity: {},
+    dbBotIds: [],
     nowMs: NOW_MS,
   };
 }
@@ -41,7 +42,7 @@ describe("DashboardHome — fluxo de criação de chatbot", () => {
     );
     await user.type(within(dialog).getByLabelText(/^Cliente/i), "Clínica Costa");
     await user.type(
-      within(dialog).getByLabelText(/O que o bot faz/i),
+      within(dialog).getByLabelText(/Especialidade/i),
       "Ortopedia",
     );
     await user.click(within(dialog).getByRole("button", { name: "Continuar" }));
@@ -80,7 +81,7 @@ describe("DashboardHome — fluxo de criação de chatbot", () => {
 
     await user.type(within(dialog).getByLabelText(/Nome do chatbot/i), "Bot X");
     await user.type(within(dialog).getByLabelText(/^Cliente/i), "Cliente X");
-    await user.type(within(dialog).getByLabelText(/O que o bot faz/i), "Suporte");
+    await user.type(within(dialog).getByLabelText(/Especialidade/i), "Suporte");
     await user.click(within(dialog).getByRole("button", { name: "Continuar" }));
     await user.click(within(dialog).getByRole("button", { name: "Continuar" }));
     await user.click(within(dialog).getByRole("button", { name: "Continuar" }));
@@ -117,7 +118,7 @@ describe("DashboardHome — fluxo de criação de chatbot", () => {
     );
     await user.type(within(dialog).getByLabelText(/^Cliente/i), "Clínica Costa");
     await user.type(
-      within(dialog).getByLabelText(/O que o bot faz/i),
+      within(dialog).getByLabelText(/Especialidade/i),
       "Ortopedia",
     );
     await user.click(within(dialog).getByRole("button", { name: "Continuar" }));
@@ -199,7 +200,7 @@ describe("DashboardHome — fluxo de criação de chatbot", () => {
     await user.type(within(dialog).getByLabelText(/Nome do chatbot/i), "Bot Temp");
     await user.type(within(dialog).getByLabelText(/^Cliente/i), "Cliente Temp");
     await user.type(
-      within(dialog).getByLabelText(/O que o bot faz/i),
+      within(dialog).getByLabelText(/Especialidade/i),
       "Suporte",
     );
     await user.click(within(dialog).getByRole("button", { name: "Continuar" }));

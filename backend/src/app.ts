@@ -110,8 +110,18 @@ export function createApp(options: AppOptions = {}) {
       clientId: typeof rawBody.clientId === "string" ? rawBody.clientId : undefined,
       clientName: typeof rawBody.clientName === "string" ? rawBody.clientName : undefined,
       status: readStatus(rawBody.status),
+      flowKey:
+        rawBody.flowKey !== undefined
+          ? getConversationFlow(rawBody.flowKey).key
+          : undefined,
       description: typeof rawBody.description === "string" ? rawBody.description : undefined,
       whatsappPhone: typeof rawBody.whatsappPhone === "string" ? rawBody.whatsappPhone : undefined,
+      examOptions: Array.isArray(rawBody.examOptions)
+        ? readStringList(rawBody.examOptions)
+        : undefined,
+      consultationNeeds: Array.isArray(rawBody.consultationNeeds)
+        ? readStringList(rawBody.consultationNeeds)
+        : undefined,
       dashboardConfig,
     });
     if (!chatbot) return c.json({ error: "Chatbot not found" }, 404);

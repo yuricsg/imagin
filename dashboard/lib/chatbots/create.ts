@@ -1,5 +1,11 @@
 import type { AccentKey, Chatbot, ChatbotStatus } from "./types";
-import type { ChatbotFlowConfig, FlowFieldKey, FlowTemplateId, FlowTone } from "./flows";
+import type {
+  ChatbotFlowConfig,
+  FlowFieldKey,
+  FlowTemplateId,
+  FlowTone,
+  InsuranceMode,
+} from "./flows";
 import { defaultFlowForTemplate, FLOW_TEMPLATES } from "./flows";
 import { buildTrackingFromInput } from "./tracking";
 import {
@@ -40,6 +46,25 @@ function isFlowFieldKey(value: unknown): value is FlowFieldKey {
   return value === "name" || value === "phone" || value === "email";
 }
 
+function isInsuranceMode(value: unknown): value is InsuranceMode {
+  return value === "particular" || value === "convenio" || value === "both";
+}
+
+/** Trims, dedupes and drops empty entries from a free-text list field. */
+function cleanStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 /**
  * Fills in flow / tracking / embed defaults for bots saved before those fields
  * existed — prevents crashes when opening the edit wizard.
@@ -64,12 +89,19 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
   const collectFields = Array.isArray(collectRaw)
     ? collectRaw.filter(isFlowFieldKey)
     : [...templateDefaults.collectFields];
+  const storedServices = cleanStringList(flowRaw?.services);
   const flow: ChatbotFlowConfig = {
     templateId,
     tone: isFlowTone(flowRaw?.tone) ? flowRaw.tone : templateDefaults.tone,
     greeting: typeof flowRaw?.greeting === "string" ? flowRaw.greeting : "",
     collectFields:
       collectFields.length > 0 ? collectFields : [...templateDefaults.collectFields],
+    services:
+      storedServices.length > 0 ? storedServices : [...templateDefaults.services],
+    insuranceMode: isInsuranceMode(flowRaw?.insuranceMode)
+      ? flowRaw.insuranceMode
+      : templateDefaults.insuranceMode,
+    insurances: cleanStringList(flowRaw?.insurances),
   };
 
   const trackingRaw =
@@ -171,6 +203,9 @@ export type ChatbotInput = {
   flowTone: FlowTone;
   flowGreeting: string;
   flowCollectFields: FlowFieldKey[];
+  flowServices: string[];
+  flowInsuranceMode: InsuranceMode;
+  flowInsurances: string[];
   gaMeasurementId: string;
   metaPixelId: string;
   whatsappEnabled: boolean;
@@ -187,11 +222,18 @@ function buildFlowFromInput(input: ChatbotInput): ChatbotFlowConfig {
     input.flowCollectFields.length > 0
       ? input.flowCollectFields
       : defaults.collectFields;
+  const services = cleanStringList(input.flowServices);
   return {
     templateId: input.flowTemplateId,
     tone: input.flowTone,
     greeting: input.flowGreeting.trim(),
     collectFields,
+    services: services.length > 0 ? services : [...defaults.services],
+    insuranceMode: input.flowInsuranceMode,
+    insurances:
+      input.flowInsuranceMode === "particular"
+        ? []
+        : cleanStringList(input.flowInsurances),
   };
 }
 
@@ -241,6 +283,9 @@ export function chatbotToInput(bot: Chatbot): ChatbotInput {
     flowTone: safe.flow.tone,
     flowGreeting: safe.flow.greeting,
     flowCollectFields: [...safe.flow.collectFields],
+    flowServices: [...safe.flow.services],
+    flowInsuranceMode: safe.flow.insuranceMode,
+    flowInsurances: [...safe.flow.insurances],
     gaMeasurementId: safe.tracking.gaMeasurementId ?? "",
     metaPixelId: safe.tracking.metaPixelId ?? "",
     whatsappEnabled: safe.whatsapp.enabled,

@@ -18,10 +18,8 @@ export const renataReis: Chatbot = {
   accent: "indigo",
   createdAt: "2026-01-12T09:00:00.000Z",
   flow: {
-    templateId: flowDefaults.templateId,
-    tone: flowDefaults.tone,
+    ...flowDefaults,
     greeting: "",
-    collectFields: flowDefaults.collectFields,
   },
   tracking: {
     gaMeasurementId: "G-RENATA-DEMO1",

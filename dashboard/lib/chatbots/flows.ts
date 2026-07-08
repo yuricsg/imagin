@@ -1,4 +1,4 @@
-/** Conversation flow types — shared by the dashboard form and the future widget API. */
+/** Conversation flow types — shared by the dashboard form and the widget API. */
 
 export type FlowTone = "friendly" | "formal";
 
@@ -7,8 +7,11 @@ export type FlowFieldKey = "name" | "phone" | "email";
 export type FlowTemplateId =
   | "patient-capture"
   | "appointment"
-  | "lead-capture"
-  | "legal-intake";
+  | "exam-scheduling"
+  | "triage";
+
+/** How the clinic bills — drives the convênio question in the conversation. */
+export type InsuranceMode = "particular" | "convenio" | "both";
 
 export interface ChatbotFlowConfig {
   templateId: FlowTemplateId;
@@ -17,6 +20,12 @@ export interface ChatbotFlowConfig {
   greeting: string;
   /** Contact fields the bot collects, in order. */
   collectFields: FlowFieldKey[];
+  /** Services / procedures / exams the clinic offers — shown as options in the chat. */
+  services: string[];
+  /** Whether the clinic serves particular, convênio, or both. */
+  insuranceMode: InsuranceMode;
+  /** Accepted health-insurance plans (when insuranceMode allows convênio). */
+  insurances: string[];
 }
 
 export interface FlowTemplate {
@@ -28,6 +37,8 @@ export interface FlowTemplate {
   defaultGreeting: string;
   /** Bot messages after the greeting, before collecting contact data. */
   prompts: string[];
+  /** Starter list of services for this kind of clinic — the operator can edit. */
+  defaultServices: string[];
 }
 
 export const FLOW_FIELD_LABELS: Record<FlowFieldKey, string> = {
@@ -40,6 +51,18 @@ export const FLOW_TONE_LABELS: Record<FlowTone, string> = {
   friendly: "Amigável",
   formal: "Formal",
 };
+
+export const INSURANCE_MODE_LABELS: Record<InsuranceMode, string> = {
+  particular: "Somente particular",
+  convenio: "Somente convênio",
+  both: "Particular e convênio",
+};
+
+export const INSURANCE_MODE_ORDER: InsuranceMode[] = [
+  "particular",
+  "convenio",
+  "both",
+];
 
 const COLLECT_PROMPTS: Record<FlowFieldKey, { friendly: string; formal: string }> =
   {
@@ -67,74 +90,103 @@ export const FLOW_TEMPLATES: Record<FlowTemplateId, FlowTemplate> = {
   "patient-capture": {
     id: "patient-capture",
     label: "Captação de pacientes",
-    description: "Interesse no serviço, convênio e contato",
-    suggestedSpecialty: "Captação de pacientes — Dermatologia",
+    description: "Primeiro contato: interesse, convênio e dados de contato",
+    suggestedSpecialty: "Captação de pacientes",
     defaultCollectFields: ["name", "phone", "email"],
     defaultGreeting:
       "Olá! Sou {botName}, assistente da {clientName}. Posso te ajudar a marcar uma consulta ou tirar dúvidas?",
     prompts: [
-      "Qual procedimento ou queixa você gostaria de tratar?",
+      "Qual atendimento ou queixa você gostaria de tratar?",
       "Você tem convênio ou prefere particular?",
     ],
+    defaultServices: ["Primeira consulta", "Avaliação", "Retorno"],
   },
   appointment: {
     id: "appointment",
-    label: "Agendamento",
-    description: "Horário preferido e dados para confirmar",
-    suggestedSpecialty: "Agendamento — Clínica odontológica",
+    label: "Agendamento de consulta",
+    description: "Horário preferido e dados para confirmar a consulta",
+    suggestedSpecialty: "Agendamento de consultas",
     defaultCollectFields: ["name", "phone"],
     defaultGreeting:
       "Oi! Aqui é {botName} da {clientName}. Vamos agendar sua consulta?",
     prompts: ["Qual dia e horário funcionam melhor para você?"],
+    defaultServices: ["Consulta", "Retorno", "Teleconsulta"],
   },
-  "lead-capture": {
-    id: "lead-capture",
-    label: "Captação de leads",
-    description: "Interesse no imóvel ou serviço e contato",
-    suggestedSpecialty: "Captação de leads — Imobiliária",
-    defaultCollectFields: ["name", "phone", "email"],
+  "exam-scheduling": {
+    id: "exam-scheduling",
+    label: "Agendamento de exames",
+    description: "Escolha do exame, solicitação médica e contato",
+    suggestedSpecialty: "Agendamento de exames",
+    defaultCollectFields: ["name", "phone"],
     defaultGreeting:
-      "Olá! Sou {botName}, da {clientName}. Em que posso te ajudar hoje?",
-    prompts: ["O que você está procurando?"],
+      "Olá! Sou {botName}, da {clientName}. Vou te ajudar a agendar seu exame.",
+    prompts: [
+      "Qual exame você precisa realizar?",
+      "Você já tem a solicitação médica?",
+    ],
+    defaultServices: [
+      "Eletrocardiograma",
+      "Ultrassonografia",
+      "Exames laboratoriais",
+      "Raio-X",
+    ],
   },
-  "legal-intake": {
-    id: "legal-intake",
-    label: "Atendimento jurídico",
-    description: "Tipo de caso e dados para retorno",
-    suggestedSpecialty: "Atendimento — Advocacia",
-    defaultCollectFields: ["name", "phone", "email"],
+  triage: {
+    id: "triage",
+    label: "Triagem / pré-atendimento",
+    description: "Entende a queixa e prioriza urgências antes do contato",
+    suggestedSpecialty: "Triagem de pacientes",
+    defaultCollectFields: ["name", "phone"],
     defaultGreeting:
-      "Bom dia. Sou {botName}, assistente da {clientName}. Como posso orientá-lo(a)?",
-    prompts: ["Qual assunto você gostaria de tratar?"],
+      "Olá! Sou {botName}, da {clientName}. Vou fazer algumas perguntas rápidas para entender seu caso.",
+    prompts: [
+      "Qual sintoma ou queixa você está sentindo?",
+      "Há quanto tempo isso começou?",
+    ],
+    defaultServices: ["Avaliação de sintomas", "Atendimento de urgência"],
   },
 };
 
 export const FLOW_TEMPLATE_ORDER: FlowTemplateId[] = [
   "patient-capture",
   "appointment",
-  "lead-capture",
-  "legal-intake",
+  "exam-scheduling",
+  "triage",
 ];
 
-/** Maps the specialty suggestion chips to a default flow template. */
-const SPECIALTY_TO_TEMPLATE: Record<string, FlowTemplateId> = {
-  "Captação de pacientes — Dermatologia": "patient-capture",
-  "Agendamento — Clínica odontológica": "appointment",
-  "Captação de leads — Imobiliária": "lead-capture",
-  "Atendimento — Advocacia": "legal-intake",
-};
+/** Common medical specialties — used as quick-fill suggestions in the form. */
+export const MEDICAL_SPECIALTIES: string[] = [
+  "Cardiologia",
+  "Dermatologia",
+  "Ginecologia e Obstetrícia",
+  "Ortopedia",
+  "Pediatria",
+  "Oftalmologia",
+  "Endocrinologia",
+  "Psiquiatria",
+  "Otorrinolaringologia",
+  "Nutrição",
+  "Fisioterapia",
+  "Odontologia",
+  "Clínica Geral",
+];
 
+/** Maps common intent keywords in the specialty/role text to a default template. */
 export function suggestTemplateForSpecialty(
   specialty: string,
 ): FlowTemplateId {
-  const trimmed = specialty.trim();
-  if (trimmed in SPECIALTY_TO_TEMPLATE) {
-    return SPECIALTY_TO_TEMPLATE[trimmed];
+  const lower = specialty.trim().toLowerCase();
+  if (lower.includes("exame")) return "exam-scheduling";
+  if (
+    lower.includes("triagem") ||
+    lower.includes("urg") ||
+    lower.includes("sintoma")
+  ) {
+    return "triage";
   }
-  const lower = trimmed.toLowerCase();
-  if (lower.includes("agend")) return "appointment";
-  if (lower.includes("imobili") || lower.includes("lead")) return "lead-capture";
-  if (lower.includes("advoc") || lower.includes("juríd")) return "legal-intake";
+  if (lower.includes("agend") || lower.includes("consulta")) {
+    return "appointment";
+  }
   return "patient-capture";
 }
 
@@ -147,6 +199,9 @@ export function defaultFlowForTemplate(
     tone: "friendly",
     greeting: "",
     collectFields: [...template.defaultCollectFields],
+    services: [...template.defaultServices],
+    insuranceMode: "both",
+    insurances: [],
   };
 }
 
@@ -179,7 +234,20 @@ export function buildFlowPreview(
 
   for (const prompt of template.prompts.slice(0, 1)) {
     messages.push({ role: "bot", text: prompt });
-    messages.push({ role: "visitor", text: "…" });
+    const service = flow.services[0];
+    messages.push({ role: "visitor", text: service ?? "…" });
+  }
+
+  if (flow.insuranceMode !== "particular") {
+    messages.push({
+      role: "bot",
+      text: "Você vai usar convênio ou prefere particular?",
+    });
+    const insurance = flow.insurances[0];
+    messages.push({
+      role: "visitor",
+      text: insurance ? `Convênio ${insurance}` : "Particular",
+    });
   }
 
   for (const field of flow.collectFields) {

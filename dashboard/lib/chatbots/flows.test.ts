@@ -7,20 +7,18 @@ import {
 } from "./flows";
 
 describe("suggestTemplateForSpecialty", () => {
-  it("maps known specialty chips to templates", () => {
+  it("maps known keywords to templates", () => {
+    expect(suggestTemplateForSpecialty("Agendamento de exames")).toBe(
+      "exam-scheduling",
+    );
     expect(
-      suggestTemplateForSpecialty("Captação de leads — Imobiliária"),
-    ).toBe("lead-capture");
-    expect(
-      suggestTemplateForSpecialty("Agendamento — Clínica odontológica"),
+      suggestTemplateForSpecialty("Agendamento de consultas"),
     ).toBe("appointment");
   });
 
   it("falls back using keywords", () => {
-    expect(suggestTemplateForSpecialty("Agendamento geral")).toBe("appointment");
-    expect(suggestTemplateForSpecialty("Escritório de advocacia")).toBe(
-      "legal-intake",
-    );
+    expect(suggestTemplateForSpecialty("Triagem de urgência")).toBe("triage");
+    expect(suggestTemplateForSpecialty("Cardiologia")).toBe("patient-capture");
   });
 });
 
@@ -54,14 +52,14 @@ describe("resolveGreeting", () => {
 
 describe("buildFlowPreview", () => {
   it("includes greeting, a prompt, collect fields and closing", () => {
-    const flow = defaultFlowForTemplate("lead-capture");
+    const flow = defaultFlowForTemplate("exam-scheduling");
     const preview = buildFlowPreview(flow, {
-      botName: "Corretor",
-      clientName: "Imobiliária",
+      botName: "Assistente",
+      clientName: "Clínica",
     });
 
     expect(preview[0].role).toBe("bot");
-    expect(preview.some((m) => m.text.includes("Corretor"))).toBe(true);
+    expect(preview.some((m) => m.text.includes("Assistente"))).toBe(true);
     expect(preview.filter((m) => m.role === "bot").length).toBeGreaterThan(2);
     expect(preview.at(-1)?.text).toMatch(/equipe/i);
   });

@@ -25,7 +25,7 @@ function createStub() {
 async function fillStepOne(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/Nome do chatbot/i), "Dra. Ana");
   await user.type(screen.getByLabelText(/^Cliente/i), "Clínica Ana");
-  await user.type(screen.getByLabelText(/O que o bot faz/i), "Captação");
+  await user.type(screen.getByLabelText(/Especialidade/i), "Cardiologia");
 }
 
 describe("ChatbotForm (wizard)", () => {
@@ -42,7 +42,7 @@ describe("ChatbotForm (wizard)", () => {
     // Step 2 — conversation
     expect(screen.getByText("Prévia da conversa no site")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: /Captação de leads/i }),
+      screen.getByRole("button", { name: /Agendamento de exames/i }),
     );
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
@@ -57,7 +57,7 @@ describe("ChatbotForm (wizard)", () => {
 
     // Step 5 — review
     expect(screen.getByText("Configuração avançada")).toBeInTheDocument();
-    expect(screen.getByText("Captação de leads")).toBeInTheDocument();
+    expect(screen.getByText("Agendamento de exames")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Criar chatbot" }));
 
@@ -66,8 +66,8 @@ describe("ChatbotForm (wizard)", () => {
         expect.objectContaining({
           name: "Dra. Ana",
           clientName: "Clínica Ana",
-          specialty: "Captação",
-          flowTemplateId: "lead-capture",
+          specialty: "Cardiologia",
+          flowTemplateId: "exam-scheduling",
           accent: "emerald",
           status: "active",
         }),
@@ -105,14 +105,17 @@ describe("ChatbotForm (wizard)", () => {
     render(<ChatbotForm onClose={vi.fn()} onCreate={createStub()} />);
 
     await user.click(
-      screen.getByRole("button", { name: /Imobiliária/i }),
+      screen.getByRole("button", { name: /Cardiologia/i }),
     );
-    await user.type(screen.getByLabelText(/Nome do chatbot/i), "Corretor");
-    await user.type(screen.getByLabelText(/^Cliente/i), "Imob");
+    await user.type(screen.getByLabelText(/Nome do chatbot/i), "Dra. Ana");
+    await user.type(screen.getByLabelText(/^Cliente/i), "Clínica Ana");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     expect(
-      screen.getByRole("button", { name: /Captação de leads/i, pressed: true }),
+      screen.getByRole("button", {
+        name: /Captação de pacientes/i,
+        pressed: true,
+      }),
     ).toBeInTheDocument();
   });
 

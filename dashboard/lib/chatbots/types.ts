@@ -5,6 +5,7 @@ export type {
   FlowFieldKey,
   FlowTemplateId,
   FlowTone,
+  InsuranceMode,
 } from "./flows";
 
 import type { ChatbotFlowConfig } from "./flows";

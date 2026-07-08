@@ -24,6 +24,20 @@ async function apiFetch(path: string, init?: RequestInit) {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
+/** Picks the backend conversation flow that matches the dashboard template. */
+function flowKeyForTemplate(templateId: Chatbot["flow"]["templateId"]): string {
+  switch (templateId) {
+    case "exam-scheduling":
+      return "exam_scheduling";
+    case "appointment":
+      return "consultation_scheduling";
+    case "triage":
+      return "urgent_triage";
+    default:
+      return "cardiology_exam_consultation";
+  }
+}
+
 /** Converts a dashboard Chatbot into the minimal payload the backend requires. */
 function toCreatePayload(bot: Chatbot) {
   return {
@@ -32,7 +46,7 @@ function toCreatePayload(bot: Chatbot) {
     clientId: bot.clientId,
     clientName: bot.clientName,
     status: bot.status === "error" ? "draft" : bot.status,
-    flowKey: "cardiology_exam_consultation",
+    flowKey: flowKeyForTemplate(bot.flow.templateId),
     description: bot.specialty,
     whatsappPhone: bot.whatsapp.enabled ? bot.whatsapp.phoneNumber : "",
     tracking: {
@@ -42,9 +56,11 @@ function toCreatePayload(bot: Chatbot) {
       },
     },
     buttonTexts: [],
-    examOptions: [],
+    // The clinic's configured services drive both branches of the widget flow:
+    // exam scheduling (examOptions) and consultation needs (consultationNeeds).
+    examOptions: bot.flow.services,
     medicalRequestOptions: [],
-    consultationNeeds: [],
+    consultationNeeds: bot.flow.services,
     consultationDecisions: [],
     dashboardConfig: bot,
   };
@@ -68,8 +84,11 @@ export async function apiUpdateChatbot(bot: Chatbot): Promise<Chatbot> {
       clientId: bot.clientId,
       clientName: bot.clientName,
       status: bot.status === "error" ? "draft" : bot.status,
+      flowKey: flowKeyForTemplate(bot.flow.templateId),
       description: bot.specialty,
       whatsappPhone: bot.whatsapp.enabled ? bot.whatsapp.phoneNumber : "",
+      examOptions: bot.flow.services,
+      consultationNeeds: bot.flow.services,
       dashboardConfig: bot,
     }),
   });
