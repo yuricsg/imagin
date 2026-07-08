@@ -36,14 +36,14 @@ export function ChatbotList({
     : null;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-zinc-200/70 bg-white/85 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/55">
-      <header className="flex items-center justify-between gap-2 border-b border-zinc-200/70 px-4 py-3 dark:border-zinc-800/70">
+    <section className="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white/85 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/55">
+      <header className="flex items-center justify-between gap-2 border-b border-zinc-200/70 px-5 py-4 dark:border-zinc-800/70">
         <div className="flex items-center gap-2">
-          <IconBot className="size-4 text-zinc-400" />
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <IconBot className="size-5 text-zinc-400" />
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
             Chatbots
           </h2>
-          <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
             {bots.length}
           </span>
         </div>
@@ -51,7 +51,7 @@ export function ChatbotList({
           <button
             type="button"
             onClick={() => onSelect(null)}
-            className="text-xs font-medium text-indigo-600 transition-colors hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+            className="text-sm font-medium text-indigo-600 transition-colors hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
           >
             Ver todos
           </button>

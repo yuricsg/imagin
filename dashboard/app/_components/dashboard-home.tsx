@@ -190,25 +190,25 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+    <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            VisÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o geral
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Visão geral
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Monitore seus chatbots e os leads recebidos por cada um.
           </p>
         </div>
         <div className="flex items-center gap-3 sm:justify-end">
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
-            {bots.length} {bots.length === 1 ? "chatbot" : "chatbots"} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
+          <p className="text-sm text-zinc-400 dark:text-zinc-500">
+            {bots.length} {bots.length === 1 ? "chatbot" : "chatbots"} ·{" "}
             {clients.length} {clients.length === 1 ? "cliente" : "clientes"}
           </p>
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            className="btn-brand px-3 py-1.5"
+            className="btn-brand px-4 py-2.5"
           >
             <IconPlus className="size-4" />
             Novo chatbot
@@ -228,8 +228,8 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               Comece pelo seu primeiro chatbot
             </h2>
             <p className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-              Cadastre um bot em poucos passos, copie o cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³digo de instalaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o e
-              acompanhe os leads aqui no painel ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â com origem do Google, Meta e
+              Cadastre um bot em poucos passos, copie o código de instalação e
+              acompanhe os leads aqui no painel — com origem do Google, Meta e
               campanhas quando configurado.
             </p>
             <button
@@ -244,14 +244,14 @@ export function DashboardHome({ data }: { data: DashboardData }) {
         </section>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <section className="min-w-0 overflow-hidden rounded-xl border border-zinc-200/70 bg-white/80 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/55 lg:col-span-2">
-          <header className="flex items-center justify-between gap-2 border-b border-zinc-200/70 px-4 py-3 dark:border-zinc-800/70">
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white/80 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/55 lg:col-span-2">
+          <header className="flex items-center justify-between gap-2 border-b border-zinc-200/70 px-5 py-4 dark:border-zinc-800/70">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                 Leads
               </h2>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
                 {filteredLeads.length === leads.length
                   ? `${leads.length} no total`
                   : `${filteredLeads.length} de ${leads.length}`}
@@ -315,7 +315,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
           )}
         </section>
 
-        <div className="space-y-5">
+        <div className="space-y-6">
           <ChatbotList
             bots={bots}
             activity={botActivity}
@@ -338,7 +338,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               <EmptyState
                 icon={<IconBot className="size-5" />}
                 title="Selecione um chatbot"
-                description="Escolha um bot na lista para filtrar seus leads e copiar o cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³digo de incorporaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o."
+                description="Escolha um bot na lista para filtrar seus leads e copiar o código de incorporação."
               />
             </div>
           )}

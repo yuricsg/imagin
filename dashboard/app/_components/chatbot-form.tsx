@@ -383,14 +383,14 @@ export function ChatbotForm({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="relative z-10 flex max-h-[min(92vh,720px)] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-zinc-200/70 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/90 sm:rounded-2xl"
+        className="relative z-10 flex max-h-[min(94vh,820px)] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-zinc-200/70 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/90 sm:rounded-2xl"
       >
-        <header className="shrink-0 border-b border-zinc-200/70 px-5 py-4 dark:border-zinc-800/70">
+        <header className="shrink-0 border-b border-zinc-200/70 px-6 py-5 dark:border-zinc-800/70">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 pr-2">
               <h2
                 id={titleId}
-                className="text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+                className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
               >
                 {createdBot
                   ? isEditing
@@ -402,7 +402,7 @@ export function ChatbotForm({
               </h2>
               <p
                 id={descId}
-                className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
+                className="mt-1.5 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400"
               >
                 {createdBot
                   ? isEditing
@@ -424,7 +424,7 @@ export function ChatbotForm({
           {!createdBot ? (
             <ol
               aria-label="Etapas do cadastro"
-              className="mt-3 flex items-center gap-2"
+              className="mt-4 flex items-center gap-1.5"
             >
               {STEPS.map((s, index) => {
                 const isCurrent = index === step;
@@ -433,26 +433,34 @@ export function ChatbotForm({
                   <li
                     key={s.title}
                     aria-current={isCurrent ? "step" : undefined}
-                    className="flex min-w-0 flex-1 items-center gap-2"
+                    className={`flex min-w-0 items-center gap-2 ${isCurrent ? "flex-1" : "shrink-0"}`}
                   >
                     <span
-                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                      className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
                         isDone || isCurrent
                           ? "bg-cyan-500 text-teal-950 dark:bg-cyan-400"
                           : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
                       }`}
                     >
-                      {isDone ? <IconCheck className="size-3.5" /> : index + 1}
+                      {isDone ? <IconCheck className="size-4" /> : index + 1}
                     </span>
                     <span
-                      className={`truncate text-xs ${
+                      className={`truncate text-sm ${
                         isCurrent
                           ? "font-semibold text-zinc-900 dark:text-zinc-100"
-                          : "font-medium text-zinc-400 dark:text-zinc-500"
+                          : "hidden font-medium text-zinc-400 dark:text-zinc-500 sm:inline"
                       }`}
                     >
                       {s.title}
                     </span>
+                    {index < STEPS.length - 1 ? (
+                      <span
+                        aria-hidden
+                        className={`hidden h-px flex-1 sm:block ${
+                          isDone ? "bg-cyan-400/60" : "bg-zinc-200 dark:bg-zinc-800"
+                        }`}
+                      />
+                    ) : null}
                   </li>
                 );
               })}
@@ -475,7 +483,7 @@ export function ChatbotForm({
             noValidate
             className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
               {step === 0 ? (
                 <>
                   <Field
@@ -560,7 +568,7 @@ export function ChatbotForm({
                   </Field>
 
                   <div className="space-y-1.5">
-                    <span className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    <span className="block text-xs font-medium text-zinc-400 dark:text-zinc-500">
                       Sugestões — toque para usar
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -573,7 +581,7 @@ export function ChatbotForm({
                             clearFieldError("specialty");
                             syncFlowFromSpecialty(suggestion);
                           }}
-                          className="rounded-full border border-zinc-200 bg-white/70 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-indigo-400 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
+                          className="rounded-full border border-zinc-200 bg-white/70 px-3 py-1.5 text-sm text-zinc-600 transition-colors hover:border-indigo-400 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
                         >
                           {suggestion}
                         </button>
@@ -586,7 +594,7 @@ export function ChatbotForm({
               {step === 1 ? (
                 <>
                   <div className="space-y-2">
-                    <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
                       Modelo de conversa
                     </span>
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -599,7 +607,7 @@ export function ChatbotForm({
                             type="button"
                             onClick={() => selectFlowTemplate(id)}
                             aria-pressed={selected}
-                            className={`rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                            className={`rounded-xl border px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
                               selected
                                 ? "border-indigo-400 bg-indigo-50/80 dark:border-indigo-600 dark:bg-indigo-950/40"
                                 : "border-zinc-200 bg-white/70 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700"
@@ -608,7 +616,7 @@ export function ChatbotForm({
                             <span className="block text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                               {template.label}
                             </span>
-                            <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+                            <span className="mt-1 block text-xs leading-snug text-zinc-500 dark:text-zinc-400">
                               {template.description}
                             </span>
                           </button>
@@ -627,7 +635,7 @@ export function ChatbotForm({
                     aria-label="Tom da conversa"
                     className="space-y-2"
                   >
-                    <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
                       Tom da conversa
                     </span>
                     <div className="flex gap-2">
@@ -672,7 +680,7 @@ export function ChatbotForm({
                   </Field>
 
                   <div className="space-y-2">
-                    <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
                       O que o bot vai pedir ao visitante
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -684,7 +692,7 @@ export function ChatbotForm({
                             type="button"
                             onClick={() => toggleCollectField(field)}
                             aria-pressed={checked}
-                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                            className={`rounded-full border px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
                               checked
                                 ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-200"
                                 : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
@@ -721,7 +729,7 @@ export function ChatbotForm({
                     aria-label="Enviar para WhatsApp"
                     className="space-y-2"
                   >
-                    <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
                       Continuar no WhatsApp
                     </span>
                     <div className="flex gap-2">
@@ -873,7 +881,7 @@ export function ChatbotForm({
                     aria-label="Cor de identificação"
                     className="space-y-2"
                   >
-                    <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
                       Cor de identificação
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -1200,7 +1208,7 @@ function SuccessScreen({
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
         <div className="flex items-center gap-3 rounded-xl border border-emerald-200/80 bg-emerald-50 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/30">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
             <IconCheck className="size-4" />
@@ -1356,7 +1364,7 @@ function FlowPreview({
   const display = botName.trim() || "Assistente";
   return (
     <div className="space-y-1.5">
-      <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+      <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
         Prévia da conversa no site
       </span>
       <div
@@ -1369,7 +1377,7 @@ function FlowPreview({
             className={`flex ${message.role === "visitor" ? "justify-end" : "justify-start"}`}
           >
             <p
-              className={`max-w-[88%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+              className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 message.role === "bot"
                   ? "rounded-bl-md bg-white text-zinc-800 ring-1 ring-zinc-200/80 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700/80"
                   : "rounded-br-md bg-indigo-600 text-white"
@@ -1403,7 +1411,7 @@ function BotPreview({
   const display = name.trim() || "Seu chatbot";
   return (
     <div className="space-y-1.5">
-      <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+      <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
         Como vai aparecer no painel
       </span>
       <div className="flex items-center gap-3 rounded-xl border border-zinc-200/70 bg-white px-3 py-3 dark:border-zinc-800/70 dark:bg-zinc-900/60">
@@ -1455,7 +1463,7 @@ function ReviewRow({
 
 function inputClass(hasError: boolean): string {
   const base =
-    "w-full rounded-lg border bg-white/70 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 transition-colors focus:outline-none focus-visible:ring-2 dark:bg-zinc-900/60 dark:text-zinc-100";
+    "w-full rounded-xl border bg-white/70 px-3.5 py-2.5 text-[15px] text-zinc-800 placeholder:text-zinc-400 transition-colors focus:outline-none focus-visible:ring-2 dark:bg-zinc-900/60 dark:text-zinc-100";
   if (hasError) {
     return `${base} border-rose-400 focus-visible:border-rose-500 focus-visible:ring-rose-500/25 dark:border-rose-500/70`;
   }
@@ -1480,9 +1488,9 @@ function Field({
   const errorId = htmlFor ? `${htmlFor}-error` : undefined;
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <label htmlFor={htmlFor} className="block">
-        <span className="flex items-center justify-between gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+        <span className="flex items-center justify-between gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-200">
           <span>
             {label}
             {required ? (
@@ -1492,7 +1500,7 @@ function Field({
             ) : null}
           </span>
           {hint ? (
-            <span className="truncate font-mono text-[11px] font-normal text-zinc-400">
+            <span className="truncate font-mono text-xs font-normal text-zinc-400">
               {hint}
             </span>
           ) : null}
@@ -1500,7 +1508,7 @@ function Field({
       </label>
       {children}
       {error ? (
-        <p id={errorId} className="text-xs text-rose-600 dark:text-rose-400">
+        <p id={errorId} className="text-sm text-rose-600 dark:text-rose-400">
           {error}
         </p>
       ) : null}

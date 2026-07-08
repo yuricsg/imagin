@@ -117,14 +117,14 @@ function LeadOriginCell({ lead }: { lead: Lead }) {
       <Badge label={channel.label} className={channel.badge} />
       {utmParts.length > 0 ? (
         <p
-          className="mt-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400"
+          className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400"
           title={utmParts.join(" · ")}
         >
           {utmParts.join(" · ")}
         </p>
       ) : null}
       <p
-        className="mt-0.5 truncate text-[11px] text-zinc-400 dark:text-zinc-500"
+        className="mt-0.5 truncate text-xs text-zinc-400 dark:text-zinc-500"
         title={lead.sourceUrl}
       >
         {lead.sourceUrl}
