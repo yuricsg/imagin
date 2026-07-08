@@ -70,9 +70,11 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     [serverBots, createdBots, serverBotIds],
   );
 
+  // A bot is editable if it is in localStorage (just created, pre-sync)
+  // OR if it was fetched from the DB (dbBotIds) — which happens after page reload.
   const editableBotIds = useMemo(
-    () => new Set(createdBots.map((bot) => bot.id)),
-    [createdBots],
+    () => new Set([...createdBots.map((b) => b.id), ...dbBotIds]),
+    [createdBots, dbBotIds],
   );
 
   const botsById = useMemo(() => {
