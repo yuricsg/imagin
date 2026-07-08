@@ -47,7 +47,9 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [clientId, setClientId] = useState<string>("all");
   const [status, setStatus] = useState<LeadStatus | "all">("all");
   const [period, setPeriod] = useState<PeriodFilter>("all");
-  // Tracks bots deleted this session so serverBots is filtered immediately.
+  // Client-side overrides for bots edited this session (id → updated Chatbot).
+  const [clientUpdates, setClientUpdates] = useState<Map<string, Chatbot>>(new Map());
+  // IDs of bots deleted this session — filtered out immediately without page reload.
   const [deletedBotIds, setDeletedBotIds] = useState<Set<string>>(new Set());
 
   // Bots registered through the UI live only in the browser (localStorage), read
@@ -58,17 +60,20 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     getServerCreatedBots,
   );
 
-  // Exclude from localStorage any bot already fetched from the server (DB),
-  // so bots don't appear twice after a page reload once they're persisted.
   const serverBotIds = useMemo(
     () => new Set(serverBots.map((b) => b.id)),
     [serverBots],
   );
 
-  const bots = useMemo(
-    () => [...serverBots, ...createdBots.filter((b) => !serverBotIds.has(b.id))],
-    [serverBots, createdBots, serverBotIds],
-  );
+  const bots = useMemo(() => {
+    const visibleServer = serverBots
+      .filter((b) => !deletedBotIds.has(b.id))
+      .map((b) => clientUpdates.get(b.id) ?? b);
+    const visibleLocal = createdBots
+      .filter((b) => !serverBotIds.has(b.id) && !deletedBotIds.has(b.id))
+      .map((b) => clientUpdates.get(b.id) ?? b);
+    return [...visibleServer, ...visibleLocal];
+  }, [serverBots, createdBots, serverBotIds, deletedBotIds, clientUpdates]);
 
   // A bot is editable if it is in localStorage (just created, pre-sync)
   // OR if it was fetched from the DB (dbBotIds) — which happens after page reload.
@@ -123,9 +128,11 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     }
     const base = normalizeStoredChatbot(editingBot) ?? editingBot;
     const updated = updateChatbot(base, input);
+    // Update in localStorage (for local bots) and in the client override map (for server bots).
     saveCreatedBots(
       createdBots.map((bot) => (bot.id === updated.id ? updated : bot)),
     );
+    setClientUpdates((prev) => new Map(prev).set(updated.id, updated));
     setSelectedBotId(updated.id);
     apiUpdateChatbot(updated).catch((err) =>
       console.warn("Failed to update bot in API:", err),
@@ -134,8 +141,13 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   }
 
   function handleDelete(id: string) {
+    // Remove from localStorage, mark as deleted client-side, and delete from DB.
     saveCreatedBots(createdBots.filter((bot) => bot.id !== id));
+    setDeletedBotIds((prev) => new Set([...prev, id]));
     if (selectedBotId === id) setSelectedBotId(null);
+    apiDeleteChatbot(id).catch((err) =>
+      console.warn("Failed to delete bot from API:", err),
+    );
   }
 
   function closeForm() {
