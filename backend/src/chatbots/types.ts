@@ -6,6 +6,8 @@ import type {
 
 export type ChatbotDefinition = {
   botId: string;
+  /** Full dashboard Chatbot JSON — stored as-is for the dashboard UI. */
+  dashboardConfig?: unknown;
   name: string;
   clientId: string;
   clientName: string;
@@ -43,6 +45,8 @@ export type PublicChatbotConfig = Omit<
 > & {
   integrationStatus: ChatbotIntegrationStatus;
   conversationFlow: ConversationFlowDefinition;
+  /** Full dashboard Chatbot JSON, present only for bots created via the dashboard. */
+  dashboardConfig?: unknown;
 };
 
 export type CreateChatbotInput = {
@@ -60,4 +64,6 @@ export type CreateChatbotInput = {
   medicalRequestOptions: string[];
   consultationNeeds: string[];
   consultationDecisions: string[];
+  /** Full dashboard Chatbot JSON — stored as-is and returned for the dashboard UI. */
+  dashboardConfig?: unknown;
 };

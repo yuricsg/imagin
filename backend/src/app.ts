@@ -53,7 +53,7 @@ export function createApp(options: AppOptions = {}) {
         return corsOrigins[0] || "*";
       },
       allowHeaders: ["Content-Type"],
-      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
       maxAge: 600,
     }),
   );
@@ -81,6 +81,30 @@ export function createApp(options: AppOptions = {}) {
 
   app.get("/api/chatbots", async (c) => {
     return c.json({ chatbots: await chatbotRepository.listPublic() });
+  });
+
+  app.put("/api/chatbots/:botId", async (c) => {
+    const botId = c.req.param("botId");
+    const rawBody = await safeReadJson(c.req.raw);
+    if (!isRecord(rawBody)) {
+      return c.json({ error: "Invalid body" }, 400);
+    }
+    const dashboardConfig = rawBody.dashboardConfig;
+    const repo = chatbotRepository as PrismaChatbotRepository;
+    if (typeof repo.update !== "function") {
+      return c.json({ error: "Not supported" }, 501);
+    }
+    const chatbot = await repo.update(botId, {
+      name: typeof rawBody.name === "string" ? rawBody.name : undefined,
+      clientId: typeof rawBody.clientId === "string" ? rawBody.clientId : undefined,
+      clientName: typeof rawBody.clientName === "string" ? rawBody.clientName : undefined,
+      status: readStatus(rawBody.status),
+      description: typeof rawBody.description === "string" ? rawBody.description : undefined,
+      whatsappPhone: typeof rawBody.whatsappPhone === "string" ? rawBody.whatsappPhone : undefined,
+      dashboardConfig,
+    });
+    if (!chatbot) return c.json({ error: "Chatbot not found" }, 404);
+    return c.json({ chatbot });
   });
 
   app.post("/api/chatbots", async (c) => {
@@ -216,6 +240,7 @@ function validateCreateChatbot(rawBody: unknown): CreateChatbotValidationResult 
   const medicalRequestOptions = readStringList(rawBody.medicalRequestOptions);
   const consultationNeeds = readStringList(rawBody.consultationNeeds);
   const consultationDecisions = readStringList(rawBody.consultationDecisions);
+  const dashboardConfig = rawBody.dashboardConfig;
 
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(botId)) {
     issues.push("botId must be a lowercase slug");
@@ -242,6 +267,7 @@ function validateCreateChatbot(rawBody: unknown): CreateChatbotValidationResult 
       medicalRequestOptions,
       consultationNeeds,
       consultationDecisions,
+      dashboardConfig,
     },
   };
 }

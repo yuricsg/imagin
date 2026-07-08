@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   staticChatbotDefinitions,
   toPublicChatbotConfig,
@@ -43,6 +44,24 @@ export class PrismaChatbotRepository implements ChatbotRepository {
     return row ? toChatbotDefinition(row) : null;
   }
 
+  async update(botId: string, input: Partial<CreateChatbotInput>): Promise<PublicChatbotConfig | null> {
+    const row = await this.prisma.bot.update({
+      where: { id: botId },
+      data: {
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.clientId !== undefined && { clientId: input.clientId }),
+        ...(input.clientName !== undefined && { clientName: input.clientName }),
+        ...(input.status !== undefined && { status: normalizeStatus(input.status) }),
+        ...(input.description !== undefined && { description: input.description }),
+        ...(input.whatsappPhone !== undefined && { whatsappPhone: input.whatsappPhone }),
+        ...(input.dashboardConfig !== undefined && {
+          dashboardConfig: input.dashboardConfig as Prisma.InputJsonValue,
+        }),
+      },
+    }).catch(() => null);
+    return row ? toPublicChatbotConfig(toChatbotDefinition(row)) : null;
+  }
+
   async create(input: CreateChatbotInput): Promise<PublicChatbotConfig> {
     const existing = await this.get(input.botId);
     if (existing) throw new Error("CHATBOT_ALREADY_EXISTS");
@@ -67,6 +86,9 @@ export class PrismaChatbotRepository implements ChatbotRepository {
         metaTestEventCode: input.tracking?.meta?.testEventCode ?? null,
         gasMeasurementId: input.tracking?.googleAnalytics?.measurementId ?? null,
         gaApiSecret: input.tracking?.googleAnalytics?.apiSecret ?? null,
+        dashboardConfig: input.dashboardConfig != null
+          ? (input.dashboardConfig as Prisma.InputJsonValue)
+          : undefined,
       },
     });
 
@@ -84,6 +106,7 @@ function toChatbotDefinition(row: Awaited<ReturnType<PrismaClient["bot"]["create
     flowKey: getConversationFlow(row.flowKey).key,
     description: row.description,
     whatsappPhone: row.whatsappPhone,
+    dashboardConfig: row.dashboardConfig ?? undefined,
     tracking: {
       meta: {
         pixelId: row.metaPixelId ?? undefined,

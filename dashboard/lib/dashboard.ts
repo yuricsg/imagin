@@ -1,5 +1,6 @@
 import { chatbotCatalog, getClients } from "./chatbots/catalog";
 import { getLeads } from "./leads";
+import { apiListChatbots } from "./api/chatbots";
 import type { Chatbot, Client, DashboardMetrics, Lead } from "./chatbots/types";
 import {
   computeBotActivity,
@@ -24,7 +25,13 @@ export interface DashboardData {
  */
 export async function getDashboardData(): Promise<DashboardData> {
   const nowMs = Date.now();
-  const bots = chatbotCatalog;
+
+  // Merge static catalog with bots created via the dashboard (stored in DB).
+  // apiListChatbots silently falls back to [] on error so the page always loads.
+  const apiBots = await apiListChatbots().catch(() => [] as Chatbot[]);
+  const apiIds = new Set(apiBots.map((b) => b.id));
+  const bots = [...chatbotCatalog.filter((b) => !apiIds.has(b.id)), ...apiBots];
+
   const clients = getClients();
   const leads = await getLeads(nowMs);
 

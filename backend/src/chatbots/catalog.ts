@@ -42,6 +42,7 @@ function toPublicChatbotConfig(
   return {
     ...publicConfig,
     conversationFlow: getConversationFlow(chatbot.flowKey),
+    dashboardConfig: chatbot.dashboardConfig,
     integrationStatus: {
       metaConfigured: Boolean(
         chatbot.tracking.meta?.pixelId && chatbot.tracking.meta.accessToken,

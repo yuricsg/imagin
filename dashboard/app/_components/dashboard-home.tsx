@@ -15,6 +15,7 @@ import {
   normalizeStoredChatbot,
   type ChatbotInput,
 } from "@/lib/chatbots/create";
+import { apiCreateChatbot, apiUpdateChatbot } from "@/lib/api/chatbots";
 import { MetricsRow } from "./metrics-row";
 import { ChatbotList } from "./chatbot-list";
 import { EmbedBlock } from "./embed-block";
@@ -55,9 +56,16 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     getServerCreatedBots,
   );
 
+  // Exclude from localStorage any bot already fetched from the server (DB),
+  // so bots don't appear twice after a page reload once they're persisted.
+  const serverBotIds = useMemo(
+    () => new Set(serverBots.map((b) => b.id)),
+    [serverBots],
+  );
+
   const bots = useMemo(
-    () => [...serverBots, ...createdBots],
-    [serverBots, createdBots],
+    () => [...serverBots, ...createdBots.filter((b) => !serverBotIds.has(b.id))],
+    [serverBots, createdBots, serverBotIds],
   );
 
   const editableBotIds = useMemo(
@@ -95,8 +103,13 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   function handleCreate(input: ChatbotInput): Chatbot {
     const existingIds = new Set(bots.map((bot) => bot.id));
     const bot = buildChatbot(input, existingIds, Date.now());
+    // Save to localStorage immediately for instant UI feedback.
     saveCreatedBots([...createdBots, bot]);
     setSelectedBotId(bot.id);
+    // Persist to DB in the background; on next page load server provides the bot.
+    apiCreateChatbot(bot).catch((err) =>
+      console.warn("Failed to save bot to API:", err),
+    );
     return bot;
   }
 
@@ -110,6 +123,9 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       createdBots.map((bot) => (bot.id === updated.id ? updated : bot)),
     );
     setSelectedBotId(updated.id);
+    apiUpdateChatbot(updated).catch((err) =>
+      console.warn("Failed to update bot in API:", err),
+    );
     return updated;
   }
 
