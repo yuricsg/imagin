@@ -1,5 +1,5 @@
 import { getChatbotById } from "./chatbots/catalog";
-import type { Lead, LeadAttribution, LeadStatus } from "./chatbots/types";
+import type { Lead, LeadAttribution, LeadChannel, LeadStatus } from "./chatbots/types";
 
 type LeadSeed = {
   name: string;
@@ -168,11 +168,79 @@ function buildLeads(nowMs: number): Lead[] {
   });
 }
 
+function mapApiLead(raw: unknown): Lead | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.botId !== "string") return null;
+
+  const source =
+    r.source && typeof r.source === "object"
+      ? (r.source as Record<string, unknown>)
+      : {};
+  const utm =
+    source.utm && typeof source.utm === "object"
+      ? (source.utm as Record<string, unknown>)
+      : {};
+  const utmSource = typeof utm.source === "string" ? utm.source : null;
+  const utmMedium = typeof utm.medium === "string" ? utm.medium : null;
+  const utmCampaign = typeof utm.campaign === "string" ? utm.campaign : null;
+
+  const channel: LeadChannel = utmSource
+    ? utmSource.includes("google")
+      ? "google"
+      : utmSource.includes("facebook") || utmSource.includes("instagram")
+        ? "meta"
+        : "referral"
+    : "direct";
+
+  const attribution: LeadAttribution = {
+    channel,
+    utmSource,
+    utmMedium,
+    utmCampaign,
+  };
+
+  const intent = typeof r.intent === "string" ? r.intent : "";
+  const consultationNeed = typeof r.consultationNeed === "string" ? r.consultationNeed : null;
+  const message = consultationNeed || intent || "Lead captado via chatbot";
+
+  return {
+    id: r.id,
+    botId: r.botId,
+    clientId: typeof r.clientId === "string" ? r.clientId : r.botId,
+    name: typeof r.name === "string" ? r.name : "—",
+    email: "",
+    phone: "",
+    status: (typeof r.status === "string" ? r.status : "new") as LeadStatus,
+    message,
+    sourceUrl: typeof source.pageUrl === "string" ? source.pageUrl : "",
+    attribution,
+    createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
+  };
+}
+
 /**
- * Returns every lead, newest first. Async on purpose: swapping for `fetch`
- * against the Hono backend later keeps callers unchanged.
+ * Returns every lead, newest first.
+ * Fetches from the backend API; falls back to mocked data if unavailable.
  */
 export async function getLeads(nowMs: number = Date.now()): Promise<Lead[]> {
+  try {
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+    const res = await fetch(`${apiBase}/api/leads`, {
+      cache: "no-store",
+      next: { revalidate: 0 },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { leads?: unknown[] };
+      const apiLeads = Array.isArray(data.leads)
+        ? data.leads.map(mapApiLead).filter((l): l is Lead => l !== null)
+        : [];
+      if (apiLeads.length > 0) return apiLeads;
+    }
+  } catch {
+    // Network unavailable — fall through to mocked data
+  }
   return buildLeads(nowMs).sort(
     (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
   );

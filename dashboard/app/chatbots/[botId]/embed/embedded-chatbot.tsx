@@ -17,6 +17,19 @@ type Step =
   | "consultationDecision"
   | "complete";
 
+type DashboardFlowConfig = {
+  greeting?: string;
+  tone?: string;
+  templateId?: string;
+  collectFields?: string[];
+};
+
+type DashboardConfig = {
+  flow?: DashboardFlowConfig;
+  clientName?: string;
+  specialty?: string;
+};
+
 type ChatbotConfig = {
   botId: string;
   name: string;
@@ -32,6 +45,7 @@ type ChatbotConfig = {
   medicalRequestOptions: string[];
   consultationNeeds: string[];
   consultationDecisions: string[];
+  dashboardConfig?: DashboardConfig;
 };
 
 type ConversationFlowKey =
@@ -72,16 +86,34 @@ type EmbeddedChatbotProps = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
-const INTRO_MESSAGES = [
-  "Olá, tudo bem? 😊",
-  "Para iniciar o atendimento preciso de algumas informações rápidas.",
-  "Como posso te chamar?",
-];
+function resolveIntroMessages(config: ChatbotConfig): string[] {
+  const dc = config.dashboardConfig;
+  if (dc?.flow?.greeting?.trim()) {
+    const greeting = dc.flow.greeting
+      .replace(/\{botName\}/g, config.name)
+      .replace(/\{clientName\}/g, dc.clientName ?? config.name);
+    return [greeting, "Como posso te chamar?"];
+  }
+  return [
+    "Olá, tudo bem? 😊",
+    "Para iniciar o atendimento preciso de algumas informações rápidas.",
+    "Como posso te chamar?",
+  ];
+}
 
-const COMPLETION_MESSAGES = [
-  "Certo. Obrigada! 🙏",
-  "Envie a mensagem para a secretária para tirar dúvidas e verificar os horários disponíveis.",
-];
+function resolveCompletionMessages(config: ChatbotConfig): string[] {
+  const tone = config.dashboardConfig?.flow?.tone;
+  if (tone === "formal") {
+    return [
+      "Obrigado. Suas informações foram registradas. 🙏",
+      "Nossa equipe entrará em contato em breve.",
+    ];
+  }
+  return [
+    "Certo. Obrigada! 🙏",
+    "Envie a mensagem para a secretária para tirar dúvidas e verificar os horários disponíveis.",
+  ];
+}
 
 const fallbackConfig: ChatbotConfig = {
   botId: "loading",
@@ -211,7 +243,7 @@ export function EmbeddedChatbot({
   useEffect(() => {
     if (isConfigLoading || configError || introStartedRef.current) return;
     introStartedRef.current = true;
-    void playBotMessages(INTRO_MESSAGES, () => setActiveStep("name"));
+    void playBotMessages(resolveIntroMessages(config), () => setActiveStep("name"));
   }, [configError, isConfigLoading, playBotMessages]);
 
   useEffect(() => {
@@ -276,7 +308,11 @@ export function EmbeddedChatbot({
       return;
     }
 
-    addUserMessage("Avaliação de sintomas graves (pressão alta ou dor no peito)");
+    addUserMessage(
+      config.dashboardConfig
+        ? "Urgência / sintomas graves"
+        : "Avaliação de sintomas graves (pressão alta ou dor no peito)",
+    );
     void submitLead({ intent: "severe_symptoms" }, "intent");
   }
 
@@ -292,15 +328,16 @@ export function EmbeddedChatbot({
   function selectConsultationNeed(need: string) {
     addUserMessage(need);
     setConsultationNeed(need);
-    void playBotMessages(
-      [
-        "A consulta com a Dra. Renata Reis dura em média 1 hora, com eletrocardiograma incluso. 😊",
-        "Investimento: R$ 430,00, com direito a retorno.",
-        "Atendimento na Av. Djalma Dutra, 606, Medcenter, Heliópolis — Garanhuns.",
-        "Quer agendar a consulta agora?",
-      ],
-      () => setActiveStep("consultationDecision"),
-    );
+    const isNewBot = Boolean(config.dashboardConfig);
+    const messages = isNewBot
+      ? [`Ótimo! Vou registrar seu interesse em "${need}".`, "Deseja confirmar?"]
+      : [
+          `A consulta com ${config.name} dura em média 1 hora, com eletrocardiograma incluso. 😊`,
+          "Investimento: R$ 430,00, com direito a retorno.",
+          "Atendimento na Av. Djalma Dutra, 606, Medcenter, Heliópolis — Garanhuns.",
+          "Quer agendar a consulta agora?",
+        ];
+    void playBotMessages(messages, () => setActiveStep("consultationDecision"));
   }
 
   async function submitLead(payload: {
@@ -332,7 +369,7 @@ export function EmbeddedChatbot({
       if (!response.ok) throw new Error(`API respondeu ${response.status}`);
       setLeadResponse((await response.json()) as LeadResponse);
       setIsSubmitting(false);
-      await playBotMessages(COMPLETION_MESSAGES, () => setActiveStep("complete"));
+      await playBotMessages(resolveCompletionMessages(config), () => setActiveStep("complete"));
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -353,7 +390,9 @@ export function EmbeddedChatbot({
         </div>
         <div>
           <p className="text-sm font-semibold text-white">{config.name}</p>
-          <p className="text-xs text-blue-200">Assistente de agendamento</p>
+          <p className="text-xs text-blue-200">
+            {config.dashboardConfig?.specialty || "Assistente de agendamento"}
+          </p>
         </div>
       </div>
 
@@ -414,11 +453,15 @@ export function EmbeddedChatbot({
               <Option onClick={() => selectIntent("schedule_exam")}>🔬 Agendar exame</Option>
             )}
             {canScheduleConsultation && (
-              <Option onClick={() => selectIntent("schedule_consultation")}>🩺 Marcar consulta cardiológica</Option>
+              <Option onClick={() => selectIntent("schedule_consultation")}>
+                🩺 {config.dashboardConfig ? "Marcar consulta" : "Marcar consulta cardiológica"}
+              </Option>
             )}
             {canTriageUrgency && (
               <Option onClick={() => selectIntent("severe_symptoms")}>
-                🚨 Avaliação de sintomas graves (pressão alta ou dor no peito)
+                {config.dashboardConfig
+                  ? "🚨 Urgência / sintomas graves"
+                  : "🚨 Avaliação de sintomas graves (pressão alta ou dor no peito)"}
               </Option>
             )}
             {!canScheduleExam && !canScheduleConsultation && !canTriageUrgency && (
