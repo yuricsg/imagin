@@ -47,6 +47,8 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [clientId, setClientId] = useState<string>("all");
   const [status, setStatus] = useState<LeadStatus | "all">("all");
   const [period, setPeriod] = useState<PeriodFilter>("all");
+  // Tracks bots deleted this session so serverBots is filtered immediately.
+  const [deletedBotIds, setDeletedBotIds] = useState<Set<string>>(new Set());
 
   // Bots registered through the UI live only in the browser (localStorage), read
   // as an external store so SSR and the first client render agree (both empty).
@@ -178,7 +180,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            VisÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o geral
+            VisÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o geral
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Monitore seus chatbots e os leads recebidos por cada um.
@@ -186,7 +188,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
         </div>
         <div className="flex items-center gap-3 sm:justify-end">
           <p className="text-xs text-zinc-400 dark:text-zinc-500">
-            {bots.length} {bots.length === 1 ? "chatbot" : "chatbots"} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
+            {bots.length} {bots.length === 1 ? "chatbot" : "chatbots"} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
             {clients.length} {clients.length === 1 ? "cliente" : "clientes"}
           </p>
           <button
@@ -212,8 +214,8 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               Comece pelo seu primeiro chatbot
             </h2>
             <p className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-              Cadastre um bot em poucos passos, copie o cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³digo de instalaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o e
-              acompanhe os leads aqui no painel ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â com origem do Google, Meta e
+              Cadastre um bot em poucos passos, copie o cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³digo de instalaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o e
+              acompanhe os leads aqui no painel ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â com origem do Google, Meta e
               campanhas quando configurado.
             </p>
             <button
@@ -322,7 +324,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               <EmptyState
                 icon={<IconBot className="size-5" />}
                 title="Selecione um chatbot"
-                description="Escolha um bot na lista para filtrar seus leads e copiar o cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³digo de incorporaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o."
+                description="Escolha um bot na lista para filtrar seus leads e copiar o cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³digo de incorporaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o."
               />
             </div>
           )}
