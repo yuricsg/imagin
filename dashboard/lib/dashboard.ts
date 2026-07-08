@@ -14,6 +14,8 @@ export interface DashboardData {
   leads: Lead[];
   metrics: DashboardMetrics;
   botActivity: Record<string, BotActivity>;
+  /** IDs of bots fetched from the DB (editable/deletable via API). */
+  dbBotIds: string[];
   /** Reference clock shared by every relative-time render to avoid drift. */
   nowMs: number;
 }
@@ -41,6 +43,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     leads,
     metrics: computeMetrics(bots, leads, nowMs),
     botActivity: Object.fromEntries(computeBotActivity(leads)),
+    dbBotIds: [...apiIds],
     nowMs,
   };
 }

@@ -44,6 +44,15 @@ export class PrismaChatbotRepository implements ChatbotRepository {
     return row ? toChatbotDefinition(row) : null;
   }
 
+  async delete(botId: string): Promise<boolean> {
+    try {
+      await this.prisma.bot.delete({ where: { id: botId } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async update(botId: string, input: Partial<CreateChatbotInput>): Promise<PublicChatbotConfig | null> {
     const row = await this.prisma.bot.update({
       where: { id: botId },

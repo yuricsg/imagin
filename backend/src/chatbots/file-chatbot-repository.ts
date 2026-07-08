@@ -25,6 +25,7 @@ export type ChatbotRepository = {
   get(botId: string): Promise<ChatbotDefinition | null>;
   create(input: CreateChatbotInput): Promise<PublicChatbotConfig>;
   update?(botId: string, input: Partial<CreateChatbotInput>): Promise<PublicChatbotConfig | null>;
+  delete?(botId: string): Promise<boolean>;
 };
 
 type StoredChatbot = Omit<ChatbotDefinition, "formatWhatsAppMessage">;

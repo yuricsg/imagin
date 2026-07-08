@@ -53,7 +53,7 @@ export function createApp(options: AppOptions = {}) {
         return corsOrigins[0] || "*";
       },
       allowHeaders: ["Content-Type"],
-      allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       maxAge: 600,
     }),
   );
@@ -81,6 +81,17 @@ export function createApp(options: AppOptions = {}) {
 
   app.get("/api/chatbots", async (c) => {
     return c.json({ chatbots: await chatbotRepository.listPublic() });
+  });
+
+  app.delete("/api/chatbots/:botId", async (c) => {
+    const botId = c.req.param("botId");
+    const repo = chatbotRepository as PrismaChatbotRepository;
+    if (typeof repo.delete !== "function") {
+      return c.json({ error: "Not supported" }, 501);
+    }
+    const deleted = await repo.delete(botId);
+    if (!deleted) return c.json({ error: "Chatbot not found" }, 404);
+    return c.json({ ok: true });
   });
 
   app.put("/api/chatbots/:botId", async (c) => {

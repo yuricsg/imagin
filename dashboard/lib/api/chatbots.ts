@@ -103,6 +103,16 @@ export async function apiListChatbots(): Promise<Chatbot[]> {
   return bots;
 }
 
+/** Deletes a bot from the backend. Returns true on success. */
+export async function apiDeleteChatbot(botId: string): Promise<boolean> {
+  try {
+    await apiFetch(`/api/chatbots/${botId}`, { method: "DELETE" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function extractChatbot(
   data: Record<string, unknown>,
   fallback: Chatbot,
