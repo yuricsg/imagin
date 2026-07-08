@@ -7,14 +7,20 @@ const API_BASE =
   (typeof window !== "undefined" ? "" : "http://localhost:4000");
 
 async function apiFetch(path: string, init?: RequestInit) {
+  const method = init?.method ?? "GET";
+  const hasBody = init?.body !== undefined;
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      ...(init?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${path} ${res.status}: ${text}`);
+    throw new Error(`API ${method} ${path} ${res.status}: ${text}`);
   }
+  // DELETE returns { ok: true } — safe to parse as JSON
   return res.json() as Promise<Record<string, unknown>>;
 }
 
@@ -108,7 +114,8 @@ export async function apiDeleteChatbot(botId: string): Promise<boolean> {
   try {
     await apiFetch(`/api/chatbots/${botId}`, { method: "DELETE" });
     return true;
-  } catch {
+  } catch (err) {
+    console.error("apiDeleteChatbot failed:", err);
     return false;
   }
 }
