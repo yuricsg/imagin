@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeStoredChatbot } from "@/lib/chatbots/create";
+import { resolveGreeting } from "@/lib/chatbots/flows";
 
 type LeadIntent =
   | "schedule_exam"
@@ -86,13 +88,27 @@ type EmbeddedChatbotProps = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
+/** Resolves the dashboard Chatbot (with defaults) from the config, if present. */
+function resolveDashboardBot(config: ChatbotConfig) {
+  return config.dashboardConfig
+    ? normalizeStoredChatbot(config.dashboardConfig)
+    : null;
+}
+
 function resolveIntroMessages(config: ChatbotConfig): string[] {
-  const dc = config.dashboardConfig;
-  if (dc?.flow?.greeting?.trim()) {
-    const greeting = dc.flow.greeting
-      .replace(/\{botName\}/g, config.name)
-      .replace(/\{clientName\}/g, dc.clientName ?? config.name);
-    return [greeting, "Como posso te chamar?"];
+  const bot = resolveDashboardBot(config);
+  if (bot) {
+    // Always meaningful: uses the operator's custom greeting, or the template
+    // default greeting with the bot/clinic names filled in.
+    const greeting = resolveGreeting(bot.flow, {
+      botName: bot.name,
+      clientName: bot.clientName,
+    });
+    const namePrompt =
+      bot.flow.tone === "formal"
+        ? "Para começar, como podemos chamá-lo(a)?"
+        : "Como posso te chamar?";
+    return [greeting, namePrompt];
   }
   return [
     "Olá, tudo bem? 😊",
@@ -102,12 +118,28 @@ function resolveIntroMessages(config: ChatbotConfig): string[] {
 }
 
 function resolveCompletionMessages(config: ChatbotConfig): string[] {
-  const tone = config.dashboardConfig?.flow?.tone;
-  if (tone === "formal") {
-    return [
-      "Obrigado. Suas informações foram registradas. 🙏",
-      "Nossa equipe entrará em contato em breve.",
-    ];
+  const bot = resolveDashboardBot(config);
+  if (bot?.whatsapp.enabled) {
+    return bot.flow.tone === "formal"
+      ? [
+          "Obrigado. Suas informações foram registradas. 🙏",
+          "Continue o atendimento pelo WhatsApp para confirmar os detalhes.",
+        ]
+      : [
+          "Prontinho! Já recebemos seus dados. 🙏",
+          "Continue no WhatsApp para falar com nossa equipe e ver os horários.",
+        ];
+  }
+  if (bot) {
+    return bot.flow.tone === "formal"
+      ? [
+          "Obrigado. Suas informações foram registradas. 🙏",
+          "Nossa equipe entrará em contato em breve.",
+        ]
+      : [
+          "Prontinho! Já recebemos seus dados. 🙏",
+          "Nossa equipe entrará em contato em breve para dar sequência.",
+        ];
   }
   return [
     "Certo. Obrigada! 🙏",
@@ -276,6 +308,8 @@ export function EmbeddedChatbot({
   const canScheduleExam = allowedIntents.includes("schedule_exam");
   const canScheduleConsultation = allowedIntents.includes("schedule_consultation");
   const canTriageUrgency = allowedIntents.includes("severe_symptoms");
+  const dashBot = useMemo(() => resolveDashboardBot(config), [config]);
+  const isFormal = dashBot?.flow.tone === "formal";
 
   function submitName() {
     const trimmedName = name.trim();
@@ -283,7 +317,9 @@ export function EmbeddedChatbot({
 
     addUserMessage(trimmedName);
     void playBotMessages(
-      [`Prazer, ${trimmedName}! 👋`, "O que você deseja fazer hoje?"],
+      isFormal
+        ? [`Obrigado, ${trimmedName}.`, "Como podemos ajudar você hoje?"]
+        : [`Prazer, ${trimmedName}! 👋`, "O que você deseja fazer hoje?"],
       () => setActiveStep("intent"),
     );
   }
