@@ -74,12 +74,18 @@ function toPublicChatbotConfig(
     ...publicConfig
   } = chatbot;
 
-  const launcher =
+  const baseLauncher =
     chatbot.launcher ??
     readLauncherFromDashboardConfig(
       chatbot.dashboardConfig,
       chatbot.buttonTexts,
     );
+  // The dedicated avatarUrl column is the durable source; fall back to it when
+  // the dashboardConfig launcher has no photo.
+  const launcher = {
+    ...baseLauncher,
+    avatarUrl: baseLauncher.avatarUrl ?? chatbot.avatarUrl ?? null,
+  };
 
   return {
     ...publicConfig,

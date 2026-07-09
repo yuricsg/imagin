@@ -78,6 +78,9 @@ export class PrismaChatbotRepository implements ChatbotRepository {
         ...(input.buttonTexts !== undefined && {
           buttonTexts: normalizeList(input.buttonTexts, defaultButtonTexts),
         }),
+        ...(input.avatarUrl !== undefined && {
+          avatarUrl: input.avatarUrl,
+        }),
         ...(input.dashboardConfig !== undefined && {
           dashboardConfig: input.dashboardConfig as Prisma.InputJsonValue,
         }),
@@ -110,6 +113,7 @@ export class PrismaChatbotRepository implements ChatbotRepository {
         metaTestEventCode: input.tracking?.meta?.testEventCode ?? null,
         gasMeasurementId: input.tracking?.googleAnalytics?.measurementId ?? null,
         gaApiSecret: input.tracking?.googleAnalytics?.apiSecret ?? null,
+        avatarUrl: input.avatarUrl ?? null,
         dashboardConfig: input.dashboardConfig != null
           ? (input.dashboardConfig as Prisma.InputJsonValue)
           : undefined,
@@ -130,6 +134,7 @@ function toChatbotDefinition(row: Awaited<ReturnType<PrismaClient["bot"]["create
     flowKey: getConversationFlow(row.flowKey).key,
     description: row.description,
     whatsappPhone: row.whatsappPhone,
+    avatarUrl: row.avatarUrl ?? null,
     dashboardConfig: row.dashboardConfig ?? undefined,
     tracking: {
       meta: {

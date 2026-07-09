@@ -25,6 +25,7 @@ model Bot {
   metaTestEventCode     String?
   gasMeasurementId      String?
   gaApiSecret           String?
+  avatarUrl             String?
   dashboardConfig       Json?
   createdAt             DateTime @default(now())
 

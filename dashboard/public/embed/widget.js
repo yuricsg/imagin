@@ -326,7 +326,20 @@
         typeof launcherConfig.avatarUrl === "string" &&
         launcherConfig.avatarUrl.trim()
       ) {
-        avatarUrl = launcherConfig.avatarUrl.trim();
+        var rawAvatar = launcherConfig.avatarUrl.trim();
+        // Data URLs and absolute URLs are used as-is; a leading-slash preset
+        // path is resolved against the app origin (not the client site).
+        if (
+          rawAvatar.indexOf("data:") === 0 ||
+          rawAvatar.indexOf("http://") === 0 ||
+          rawAvatar.indexOf("https://") === 0
+        ) {
+          avatarUrl = rawAvatar;
+        } else if (rawAvatar.charAt(0) === "/") {
+          avatarUrl = appOrigin.replace(/\/$/, "") + rawAvatar;
+        } else {
+          avatarUrl = rawAvatar;
+        }
         avatar.src = avatarUrl;
       }
     })

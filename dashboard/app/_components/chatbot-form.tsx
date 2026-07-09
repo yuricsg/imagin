@@ -52,7 +52,11 @@ import {
 import {
   DEFAULT_LAUNCHER,
   DEFAULT_LAUNCHER_TEASER,
+  DEFAULT_LAUNCHER_AVATAR_PATH,
   LAUNCHER_AVATAR_PRESETS,
+  LAUNCHER_AVATAR_ACCEPT,
+  fileToLauncherAvatar,
+  isCustomLauncherPhoto,
   resolveLauncherAvatarPath,
 } from "@/lib/chatbots/launcher";
 import { embedSnippet, slugify } from "@/lib/format";
@@ -252,6 +256,8 @@ export function ChatbotForm({
   const [launcherAvatarUrl, setLauncherAvatarUrl] = useState<string | null>(
     seed?.launcherAvatarUrl ?? null,
   );
+  const [avatarError, setAvatarError] = useState("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [showTracking, setShowTracking] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<ChatbotFieldErrors>({});
@@ -265,6 +271,24 @@ export function ChatbotForm({
 
   const pageRef = useRef<HTMLElement>(null);
   const whatsappMessageRef = useRef<HTMLTextAreaElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleAvatarFile(file: File | undefined) {
+    if (!file) return;
+    setAvatarError("");
+    setAvatarUploading(true);
+    try {
+      const dataUrl = await fileToLauncherAvatar(file);
+      setLauncherAvatarUrl(dataUrl);
+    } catch (err) {
+      setAvatarError(
+        err instanceof Error ? err.message : "Não foi possível usar esta imagem.",
+      );
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  }
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -1909,14 +1933,9 @@ export function ChatbotForm({
                   </Field>
 
                   <div className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
-                        Avatar do balão
-                      </span>
-                      <span className="rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
-                        Upload em desenvolvimento
-                      </span>
-                    </div>
+                    <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                      Avatar do balão
+                    </span>
                     <div
                       role="group"
                       aria-label="Escolher avatar"
@@ -1924,13 +1943,17 @@ export function ChatbotForm({
                     >
                       {LAUNCHER_AVATAR_PRESETS.map((preset) => {
                         const selected =
+                          !isCustomLauncherPhoto(launcherAvatarUrl) &&
                           resolveLauncherAvatarPath(launcherAvatarUrl) ===
-                          preset.path;
+                            preset.path;
                         return (
                           <button
                             key={preset.id}
                             type="button"
-                            onClick={() => setLauncherAvatarUrl(preset.path)}
+                            onClick={() => {
+                              setLauncherAvatarUrl(preset.path);
+                              setAvatarError("");
+                            }}
                             aria-pressed={selected}
                             className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
                               selected
@@ -1958,19 +1981,70 @@ export function ChatbotForm({
                         );
                       })}
                     </div>
+
+                    {isCustomLauncherPhoto(launcherAvatarUrl) ? (
+                      <div className="flex items-center gap-3 rounded-xl border border-indigo-400 bg-indigo-50/80 px-3 py-3 dark:border-indigo-600 dark:bg-indigo-950/40">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={launcherAvatarUrl ?? ""}
+                          alt="Foto personalizada do bot"
+                          width={56}
+                          height={56}
+                          className="size-14 shrink-0 rounded-full border border-indigo-300 object-cover dark:border-indigo-700"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            Foto personalizada
+                          </p>
+                          <p className="mt-0.5 text-xs leading-snug text-zinc-500 dark:text-zinc-400">
+                            Aparece recortada no círculo do balão no site.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLauncherAvatarUrl(DEFAULT_LAUNCHER_AVATAR_PATH);
+                            setAvatarError("");
+                          }}
+                          className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-white hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ) : null}
+
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept={LAUNCHER_AVATAR_ACCEPT}
+                      className="sr-only"
+                      onChange={(e) =>
+                        void handleAvatarFile(e.target.files?.[0])
+                      }
+                    />
                     <div className="flex flex-wrap items-center gap-3">
                       <button
                         type="button"
-                        disabled
-                        className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-400 dark:border-zinc-700 dark:text-zinc-500"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={avatarUploading}
+                        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:pointer-events-none disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
                       >
-                        Enviar foto
+                        {avatarUploading
+                          ? "Processando…"
+                          : isCustomLauncherPhoto(launcherAvatarUrl)
+                            ? "Trocar foto"
+                            : "Enviar foto"}
                       </button>
                       <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                        Escolha um dos robôs por enquanto. Upload de foto
-                        personalizada chega em breve.
+                        PNG, JPEG, WEBP ou GIF, até 8 MB. A imagem é recortada em
+                        quadrado para preencher o círculo.
                       </p>
                     </div>
+                    {avatarError ? (
+                      <p className="text-xs text-rose-600 dark:text-rose-400">
+                        {avatarError}
+                      </p>
+                    ) : null}
                   </div>
 
                   <BotPreview

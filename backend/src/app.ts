@@ -119,6 +119,10 @@ export function createApp(options: AppOptions = {}) {
       buttonTexts: Array.isArray(rawBody.buttonTexts)
         ? readStringList(rawBody.buttonTexts)
         : undefined,
+      avatarUrl:
+        rawBody.avatarUrl !== undefined
+          ? readAvatarUrl(rawBody.avatarUrl)
+          : undefined,
       examOptions: Array.isArray(rawBody.examOptions)
         ? readStringList(rawBody.examOptions)
         : undefined,
@@ -264,6 +268,7 @@ function validateCreateChatbot(rawBody: unknown): CreateChatbotValidationResult 
   const medicalRequestOptions = readStringList(rawBody.medicalRequestOptions);
   const consultationNeeds = readStringList(rawBody.consultationNeeds);
   const consultationDecisions = readStringList(rawBody.consultationDecisions);
+  const avatarUrl = readAvatarUrl(rawBody.avatarUrl);
   const dashboardConfig = rawBody.dashboardConfig;
 
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(botId)) {
@@ -291,9 +296,17 @@ function validateCreateChatbot(rawBody: unknown): CreateChatbotValidationResult 
       medicalRequestOptions,
       consultationNeeds,
       consultationDecisions,
+      avatarUrl,
       dashboardConfig,
     },
   };
+}
+
+/** Accepts a data URL / http(s) / preset path avatar, or null to clear it. */
+function readAvatarUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function readTracking(value: unknown): CreateChatbotInput["tracking"] {

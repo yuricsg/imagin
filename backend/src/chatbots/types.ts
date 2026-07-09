@@ -35,6 +35,8 @@ export type ChatbotDefinition = {
     teaserTexts: string[];
     avatarUrl: string | null;
   };
+  /** Dedicated column mirroring the launcher photo (data URL or preset path). */
+  avatarUrl?: string | null;
   examOptions: string[];
   medicalRequestOptions: string[];
   consultationNeeds: string[];
@@ -72,6 +74,8 @@ export type CreateChatbotInput = {
   medicalRequestOptions: string[];
   consultationNeeds: string[];
   consultationDecisions: string[];
+  /** Launcher photo (data URL or preset path) persisted in its own column. */
+  avatarUrl?: string | null;
   /** Full dashboard Chatbot JSON — stored as-is and returned for the dashboard UI. */
   dashboardConfig?: unknown;
 };

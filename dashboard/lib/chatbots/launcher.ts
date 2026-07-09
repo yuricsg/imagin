@@ -62,8 +62,87 @@ export function resolveLauncherAvatarPath(
   if (custom.startsWith("http://") || custom.startsWith("https://")) {
     return custom;
   }
+  if (custom.startsWith("data:image/")) return custom;
   if (custom.startsWith("/")) return custom;
   return DEFAULT_LAUNCHER_AVATAR_PATH;
+}
+
+/** Image formats accepted for a custom launcher photo. */
+export const LAUNCHER_AVATAR_ACCEPTED_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "image/avif",
+];
+
+/** `accept` attribute for the file input. */
+export const LAUNCHER_AVATAR_ACCEPT = LAUNCHER_AVATAR_ACCEPTED_TYPES.join(",");
+
+/** Max size of the uploaded file before processing (8 MB). */
+export const LAUNCHER_AVATAR_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Side of the square avatar we store (crisp on retina, still compact). */
+export const LAUNCHER_AVATAR_OUTPUT_SIZE = 192;
+
+/** True when the stored avatar is an uploaded photo (data URL). */
+export function isCustomLauncherPhoto(avatarUrl: string | null | undefined): boolean {
+  const value = avatarUrl?.trim();
+  return Boolean(value && value.startsWith("data:image/"));
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Não foi possível abrir a imagem."));
+    img.src = src;
+  });
+}
+
+/**
+ * Validates and normalizes an uploaded image into a compact, center-cropped
+ * square data URL that fills the launcher circle. Runs in the browser only.
+ */
+export async function fileToLauncherAvatar(file: File): Promise<string> {
+  if (!LAUNCHER_AVATAR_ACCEPTED_TYPES.includes(file.type)) {
+    throw new Error("Formato não suportado. Use PNG, JPEG, WEBP, GIF ou AVIF.");
+  }
+  if (file.size > LAUNCHER_AVATAR_MAX_BYTES) {
+    throw new Error("Imagem muito grande. Envie um arquivo de até 8 MB.");
+  }
+
+  const sourceDataUrl = await readFileAsDataUrl(file);
+  const img = await loadImage(sourceDataUrl);
+  const size = LAUNCHER_AVATAR_OUTPUT_SIZE;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return sourceDataUrl;
+
+  // Center-crop to a square ("cover") so the photo fills the circle with no
+  // distortion or empty space, then downscale to the target size.
+  const side = Math.min(img.width, img.height);
+  const sx = (img.width - side) / 2;
+  const sy = (img.height - side) / 2;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+
+  // Prefer WEBP (smaller); fall back to JPEG when unsupported.
+  const webp = canvas.toDataURL("image/webp", 0.85);
+  if (webp.startsWith("data:image/webp")) return webp;
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
 /** Which built-in preset is selected, if any. */

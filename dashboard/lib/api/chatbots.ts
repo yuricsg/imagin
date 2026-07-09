@@ -66,6 +66,7 @@ function toCreatePayload(bot: Chatbot) {
     medicalRequestOptions: [],
     consultationNeeds: bot.flow.services,
     consultationDecisions: [],
+    avatarUrl: bot.launcher?.avatarUrl ?? null,
     dashboardConfig: bot,
   };
 }
@@ -98,6 +99,7 @@ export async function apiUpdateChatbot(bot: Chatbot): Promise<Chatbot> {
       buttonTexts: teaserTexts,
       examOptions: bot.flow.services,
       consultationNeeds: bot.flow.services,
+      avatarUrl: bot.launcher?.avatarUrl ?? null,
       dashboardConfig: bot,
     }),
   });
