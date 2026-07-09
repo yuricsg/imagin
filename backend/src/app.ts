@@ -116,6 +116,9 @@ export function createApp(options: AppOptions = {}) {
           : undefined,
       description: typeof rawBody.description === "string" ? rawBody.description : undefined,
       whatsappPhone: typeof rawBody.whatsappPhone === "string" ? rawBody.whatsappPhone : undefined,
+      buttonTexts: Array.isArray(rawBody.buttonTexts)
+        ? readStringList(rawBody.buttonTexts)
+        : undefined,
       examOptions: Array.isArray(rawBody.examOptions)
         ? readStringList(rawBody.examOptions)
         : undefined,

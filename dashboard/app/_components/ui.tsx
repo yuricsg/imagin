@@ -24,12 +24,25 @@ export function Avatar({
   name,
   className,
   size = "md",
+  imageSrc,
 }: {
   name: string;
   className: string;
   size?: "sm" | "md";
+  /** When set, shows the photo/illustration instead of initials. */
+  imageSrc?: string | null;
 }) {
   const sizing = size === "sm" ? "size-7 text-[11px]" : "size-9 text-xs";
+  if (imageSrc) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageSrc}
+        alt=""
+        className={`inline-flex shrink-0 rounded-lg object-cover ${sizing}`}
+      />
+    );
+  }
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center rounded-lg font-semibold ${sizing} ${className}`}

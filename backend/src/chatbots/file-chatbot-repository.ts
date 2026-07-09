@@ -126,13 +126,16 @@ function normalizeStoredChatbot(input: CreateChatbotInput | StoredChatbot) {
       input.consultationDecisions,
       defaultConsultationDecisions,
     ),
+    dashboardConfig:
+      "dashboardConfig" in input ? input.dashboardConfig : undefined,
   } satisfies StoredChatbot;
 }
 
 function toChatbotDefinition(chatbot: StoredChatbot): ChatbotDefinition {
   return {
     ...chatbot,
-    formatWhatsAppMessage: formatStandardWhatsAppMessage,
+    formatWhatsAppMessage: (lead) =>
+      formatStandardWhatsAppMessage(lead, chatbot.dashboardConfig),
   };
 }
 

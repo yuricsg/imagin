@@ -40,6 +40,10 @@ function flowKeyForTemplate(templateId: Chatbot["flow"]["templateId"]): string {
 
 /** Converts a dashboard Chatbot into the minimal payload the backend requires. */
 function toCreatePayload(bot: Chatbot) {
+  const teaserTexts =
+    bot.launcher?.teaserTexts?.filter((t) => t.trim()).length > 0
+      ? bot.launcher.teaserTexts.map((t) => t.trim()).filter(Boolean)
+      : ["Olá! Posso te ajudar?"];
   return {
     botId: bot.id,
     name: bot.name,
@@ -55,7 +59,7 @@ function toCreatePayload(bot: Chatbot) {
         measurementId: bot.tracking.gaMeasurementId || undefined,
       },
     },
-    buttonTexts: [],
+    buttonTexts: teaserTexts,
     // The clinic's configured services drive both branches of the widget flow:
     // exam scheduling (examOptions) and consultation needs (consultationNeeds).
     examOptions: bot.flow.services,
@@ -77,6 +81,10 @@ export async function apiCreateChatbot(bot: Chatbot): Promise<Chatbot> {
 
 /** Updates a bot on the backend. Returns the saved Chatbot. */
 export async function apiUpdateChatbot(bot: Chatbot): Promise<Chatbot> {
+  const teaserTexts =
+    bot.launcher?.teaserTexts?.filter((t) => t.trim()).length > 0
+      ? bot.launcher.teaserTexts.map((t) => t.trim()).filter(Boolean)
+      : ["Olá! Posso te ajudar?"];
   const data = await apiFetch(`/api/chatbots/${bot.id}`, {
     method: "PUT",
     body: JSON.stringify({
@@ -87,6 +95,7 @@ export async function apiUpdateChatbot(bot: Chatbot): Promise<Chatbot> {
       flowKey: flowKeyForTemplate(bot.flow.templateId),
       description: bot.specialty,
       whatsappPhone: bot.whatsapp.enabled ? bot.whatsapp.phoneNumber : "",
+      buttonTexts: teaserTexts,
       examOptions: bot.flow.services,
       consultationNeeds: bot.flow.services,
       dashboardConfig: bot,

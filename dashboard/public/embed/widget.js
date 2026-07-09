@@ -10,12 +10,15 @@
   const appOrigin = script.dataset.appOrigin || new URL(script.src).origin;
   const apiBaseUrl = script.dataset.apiBaseUrl || appOrigin;
   const rootId = `imagin-widget-${botId}-${clientId}`;
+  const DEFAULT_TEASER = "Olá! Posso te ajudar?";
+  const DEFAULT_AVATAR = `${appOrigin.replace(/\/$/, "")}/embed/robot-helper.png`;
 
   if (document.getElementById(rootId)) {
     return;
   }
 
-  let buttonTexts = [script.dataset.buttonText || "Iniciar atendimento"];
+  let teaserTexts = [script.dataset.buttonText || DEFAULT_TEASER];
+  let avatarUrl = DEFAULT_AVATAR;
 
   const root = document.createElement("div");
   root.id = rootId;
@@ -30,30 +33,95 @@
       right: 20px;
       bottom: 20px;
       z-index: 2147483000;
-      max-width: min(360px, calc(100vw - 40px));
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      max-width: min(420px, calc(100vw - 40px));
+      padding: 0;
       border: 0;
-      border-radius: 999px;
-      background: #205ea8;
-      color: #ffffff;
-      box-shadow: 0 12px 30px rgba(14, 31, 53, 0.24);
+      background: transparent;
       cursor: pointer;
-      font: 600 14px/1.35 Arial, Helvetica, sans-serif;
-      padding: 13px 18px;
+      font: 500 14px/1.4 Arial, Helvetica, sans-serif;
       text-align: left;
+      color: #18181b;
+    }
+    .imagin-launcher:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 4px;
+      border-radius: 16px;
+    }
+    .imagin-bubble {
+      position: relative;
+      max-width: min(280px, calc(100vw - 120px));
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: #ffffff;
+      box-shadow: 0 10px 28px rgba(24, 24, 27, 0.18);
+      color: #18181b;
+    }
+    .imagin-bubble::after {
+      content: "";
+      position: absolute;
+      right: -7px;
+      bottom: 18px;
+      width: 14px;
+      height: 14px;
+      background: #ffffff;
+      transform: rotate(45deg);
+      box-shadow: 3px -3px 8px rgba(24, 24, 27, 0.06);
+    }
+    .imagin-bubble-text {
+      display: block;
+      font: 500 14px/1.4 Arial, Helvetica, sans-serif;
+      color: #18181b;
+    }
+    .imagin-bubble-text strong,
+    .imagin-bubble-text b {
+      font-weight: 700;
+    }
+    .imagin-avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+      width: 56px;
+      height: 56px;
+    }
+    .imagin-avatar {
+      display: block;
+      width: 56px;
+      height: 56px;
+      border-radius: 999px;
+      object-fit: cover;
+      background: #e0e7ff;
+      box-shadow: 0 8px 20px rgba(24, 24, 27, 0.2);
+      border: 2px solid #ffffff;
+    }
+    .imagin-online {
+      position: absolute;
+      right: 2px;
+      bottom: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #10b981;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
+    }
+    .imagin-launcher[aria-expanded="true"] .imagin-bubble {
+      display: none;
     }
     .imagin-panel {
       position: fixed;
       right: 20px;
-      bottom: 82px;
+      bottom: 92px;
       z-index: 2147483000;
       width: min(420px, calc(100vw - 40px));
-      max-height: min(720px, calc(100vh - 110px));
+      max-height: min(720px, calc(100vh - 120px));
       display: none;
       overflow: hidden;
-      border: 1px solid #d8deea;
-      border-radius: 10px;
+      border: 1px solid #e4e4e7;
+      border-radius: 12px;
       background: #ffffff;
-      box-shadow: 0 20px 60px rgba(14, 31, 53, 0.28);
+      box-shadow: 0 20px 60px rgba(24, 24, 27, 0.28);
     }
     .imagin-panel[data-open="true"] { display: block; }
     .imagin-close {
@@ -66,13 +134,13 @@
       border: 0;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.92);
-      color: #172033;
+      color: #18181b;
       cursor: pointer;
       font: 700 18px/1 Arial, Helvetica, sans-serif;
     }
     .imagin-frame {
       width: 100%;
-      height: min(640px, calc(100vh - 112px));
+      height: min(640px, calc(100vh - 122px));
       min-height: 560px;
       border: 0;
       display: block;
@@ -84,15 +152,18 @@
         bottom: 12px;
         max-width: calc(100vw - 24px);
       }
+      .imagin-bubble {
+        max-width: calc(100vw - 100px);
+      }
       .imagin-panel {
         right: 8px;
         left: 8px;
-        bottom: 72px;
+        bottom: 84px;
         width: auto;
-        max-height: calc(100vh - 84px);
+        max-height: calc(100vh - 96px);
       }
       .imagin-frame {
-        height: calc(100vh - 84px);
+        height: calc(100vh - 96px);
       }
     }
   `;
@@ -109,7 +180,36 @@
   const launcher = document.createElement("button");
   launcher.type = "button";
   launcher.className = "imagin-launcher";
-  launcher.textContent = buttonTexts[0];
+  launcher.setAttribute("aria-expanded", "false");
+  launcher.setAttribute("aria-label", "Abrir atendimento");
+
+  const bubble = document.createElement("span");
+  bubble.className = "imagin-bubble";
+
+  const bubbleText = document.createElement("span");
+  bubbleText.className = "imagin-bubble-text";
+  bubbleText.textContent = teaserTexts[0];
+  bubble.appendChild(bubbleText);
+
+  const avatarWrap = document.createElement("span");
+  avatarWrap.className = "imagin-avatar-wrap";
+
+  const avatar = document.createElement("img");
+  avatar.className = "imagin-avatar";
+  avatar.alt = "";
+  avatar.width = 56;
+  avatar.height = 56;
+  avatar.decoding = "async";
+  avatar.src = avatarUrl;
+
+  const online = document.createElement("span");
+  online.className = "imagin-online";
+  online.setAttribute("aria-hidden", "true");
+
+  avatarWrap.appendChild(avatar);
+  avatarWrap.appendChild(online);
+  launcher.appendChild(bubble);
+  launcher.appendChild(avatarWrap);
 
   let iframe = null;
   let textIndex = 0;
@@ -161,12 +261,12 @@
   close.addEventListener("click", closePanel);
 
   window.setInterval(function () {
-    if (panel.dataset.open === "true") {
+    if (panel.dataset.open === "true" || teaserTexts.length < 2) {
       return;
     }
 
-    textIndex = (textIndex + 1) % buttonTexts.length;
-    launcher.textContent = buttonTexts[textIndex];
+    textIndex = (textIndex + 1) % teaserTexts.length;
+    bubbleText.textContent = teaserTexts[textIndex];
   }, 4500);
 
   window.addEventListener("message", function (event) {
@@ -196,19 +296,42 @@
       return response.json();
     })
     .then(function (body) {
-      if (
-        body &&
-        body.chatbot &&
-        Array.isArray(body.chatbot.buttonTexts) &&
-        body.chatbot.buttonTexts.length > 0
-      ) {
-        buttonTexts = body.chatbot.buttonTexts;
+      const chatbot = body && body.chatbot ? body.chatbot : null;
+      if (!chatbot) return;
+
+      const launcherConfig = chatbot.launcher;
+      const fromLauncher =
+        launcherConfig &&
+        Array.isArray(launcherConfig.teaserTexts) &&
+        launcherConfig.teaserTexts.length > 0
+          ? launcherConfig.teaserTexts.filter(function (entry) {
+              return typeof entry === "string" && entry.trim();
+            })
+          : null;
+      const fromButtons =
+        Array.isArray(chatbot.buttonTexts) && chatbot.buttonTexts.length > 0
+          ? chatbot.buttonTexts.filter(function (entry) {
+              return typeof entry === "string" && entry.trim();
+            })
+          : null;
+
+      if (fromLauncher || fromButtons) {
+        teaserTexts = fromLauncher || fromButtons;
         textIndex = 0;
-        launcher.textContent = buttonTexts[0];
+        bubbleText.textContent = teaserTexts[0];
+      }
+
+      if (
+        launcherConfig &&
+        typeof launcherConfig.avatarUrl === "string" &&
+        launcherConfig.avatarUrl.trim()
+      ) {
+        avatarUrl = launcherConfig.avatarUrl.trim();
+        avatar.src = avatarUrl;
       }
     })
     .catch(function () {
-      // Keep the generic launcher text when public config is unavailable.
+      // Keep the default teaser/avatar when public config is unavailable.
     });
 
   panel.appendChild(close);

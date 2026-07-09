@@ -32,8 +32,14 @@ export function validateLeadSubmission(
   const name = readRequiredString(rawBody, "name", issues);
   const intent = readIntent(rawBody.intent, issues);
   const source = readSource(rawBody.source);
+  const flowMode =
+    rawBody.flowMode === "custom_dialogue" ? "custom_dialogue" : "legacy";
+  const isCustomDialogue = flowMode === "custom_dialogue";
 
-  if (!isConversationIntentAllowed(chatbot.flowKey, intent)) {
+  if (
+    !isCustomDialogue &&
+    !isConversationIntentAllowed(chatbot.flowKey, intent)
+  ) {
     issues.push("intent is not enabled for this chatbot flow");
   }
 
@@ -43,7 +49,28 @@ export function validateLeadSubmission(
     name,
     intent,
     source,
+    flowMode,
   };
+
+  const phone = readOptionalString(rawBody.phone);
+  const email = readOptionalString(rawBody.email);
+  const message = readOptionalString(rawBody.message);
+  if (phone) submission.phone = phone;
+  if (email) submission.email = email;
+  if (message) submission.message = message;
+
+  const answers = readAnswers(rawBody.answers);
+  if (answers) submission.answers = answers;
+
+  const customFields = readStringRecord(rawBody.customFields);
+  if (customFields) submission.customFields = customFields;
+
+  if (isCustomDialogue) {
+    if (issues.length > 0) {
+      return { ok: false, issues };
+    }
+    return { ok: true, value: submission };
+  }
 
   if (intent === "schedule_exam") {
     const selectedExams = readStringArray(rawBody.selectedExams);
@@ -129,6 +156,12 @@ export function leadToDto(lead: LeadRecord) {
     medicalRequestStatus: lead.medicalRequestStatus ?? null,
     consultationNeed: lead.consultationNeed ?? null,
     consultationDecision: lead.consultationDecision ?? null,
+    phone: lead.phone ?? null,
+    email: lead.email ?? null,
+    message: lead.message ?? null,
+    customFields: lead.customFields ?? null,
+    answers: lead.answers ?? null,
+    flowMode: lead.flowMode ?? "legacy",
     source: lead.source,
     whatsappMessage: lead.whatsappMessage,
     whatsappUrl: lead.whatsappUrl,
@@ -165,6 +198,41 @@ function readStringArray(value: unknown) {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function readAnswers(
+  value: unknown,
+): Record<string, string | string[]> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, string | string[]> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") {
+      const trimmed = entry.trim();
+      if (trimmed) out[key] = trimmed;
+      continue;
+    }
+    if (Array.isArray(entry)) {
+      const items = entry
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (items.length > 0) out[key] = items;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function readStringRecord(
+  value: unknown,
+): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (trimmed) out[key] = trimmed;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function readIntent(value: unknown, issues: string[]): LeadIntent {

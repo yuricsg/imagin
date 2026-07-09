@@ -11,6 +11,13 @@ colors:
   primary: "#6366f1"
   primary-deep: "#4f46e5"
   accent-violet: "#7c3aed"
+  accent-indigo-soft: "#e0e7ff"
+  status-online: "#10b981"
+  status-online-ring: "rgba(16, 185, 129, 0.25)"
+  ink-shadow: "rgba(24, 24, 27, 0.18)"
+  ink-shadow-soft: "rgba(24, 24, 27, 0.06)"
+  ink-shadow-strong: "rgba(24, 24, 27, 0.2)"
+  ink-shadow-panel: "rgba(24, 24, 27, 0.28)"
   error: "#e11d48"
   error-soft: "#fff1f2"
 typography:
@@ -35,10 +42,16 @@ typography:
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.4
+  widget:
+    fontFamily: "Arial, Helvetica, sans-serif"
+    fontSize: "14px"
+    fontWeight: 500
+    lineHeight: 1.4
 rounded:
   control: "8px"
   panel: "12px"
   dialog: "16px"
+  full: "999px"
 spacing:
   control-y: "8px"
   control-x: "12px"
@@ -58,6 +71,13 @@ components:
   panel:
     backgroundColor: "{colors.surface-elevated}"
     rounded: "{rounded.panel}"
+  site-launcher:
+    bubbleBackground: "{colors.surface-elevated}"
+    bubbleText: "{colors.ink}"
+    avatarBackground: "{colors.accent-indigo-soft}"
+    onlineDot: "{colors.status-online}"
+    rounded: "{rounded.dialog}"
+    avatarRounded: "{rounded.full}"
 ---
 
 ## Overview
@@ -75,6 +95,7 @@ Mood: calm, dense, trustworthy. Not a marketing site.
 | Muted | `zinc-500`–`zinc-400` | Secondary labels, hints |
 | Primary | `indigo-500` → `violet-600` gradient | Primary actions, brand mark |
 | Accent palette | indigo, violet, sky, emerald, amber, rose | Per-chatbot identity (`lib/chatbots/accents.ts`) |
+| Site launcher | white bubble, ink text, indigo-soft avatar fallback, emerald online dot | Embed widget on client sites (`public/embed/widget.js`) |
 | Error | `rose-500` border, `rose-600` text | Validation |
 
 Accent color is for identity dots, selected rows, and primary CTAs — not decorative fills on inactive UI.
@@ -101,6 +122,7 @@ No heavy drop shadows on static panels.
 - **Avatar**: `rounded-lg` initials chip with accent gradient fill.
 - **Empty state**: centered icon in zinc gradient tile + title + description.
 - **Modal**: bottom sheet on mobile (`rounded-t-2xl`), centered dialog on `sm+` (`max-w-lg`, `rounded-2xl`).
+- **Site launcher** (`public/embed/widget.js`): speech bubble + circular avatar + online status; Arial stack (host-site isolation); `rounded.dialog` bubble, `rounded.full` avatar; colors from `components.site-launcher`.
 
 ## Do's and Don'ts
 

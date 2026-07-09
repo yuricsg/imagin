@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Chatbot } from "@/lib/chatbots/types";
 import { ACCENTS } from "@/lib/chatbots/accents";
 import { embedSnippet, iframeUrl } from "@/lib/format";
+import { resolveLauncherAvatarPath } from "@/lib/chatbots/launcher";
 import { Avatar } from "./ui";
 import { IconCheck, IconCopy, IconExternal } from "./icons";
 
@@ -30,7 +31,12 @@ export function EmbedBlock({ bot }: { bot: Chatbot }) {
       <header
         className={`flex items-center gap-3 border-b border-zinc-200/70 px-4 py-3 dark:border-zinc-800/70 ${accent.surface}`}
       >
-        <Avatar name={bot.name} className={accent.avatar} size="sm" />
+        <Avatar
+          name={bot.name}
+          className={accent.avatar}
+          size="sm"
+          imageSrc={resolveLauncherAvatarPath(bot.launcher?.avatarUrl)}
+        />
         <div className="min-w-0">
           <h2 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Incorporar {bot.name}

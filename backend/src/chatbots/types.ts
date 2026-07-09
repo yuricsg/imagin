@@ -27,6 +27,14 @@ export type ChatbotDefinition = {
     };
   };
   buttonTexts: string[];
+  /**
+   * Site launcher (speech bubble + avatar). Prefer dashboardConfig.launcher;
+   * when absent, teaserTexts fall back to buttonTexts.
+   */
+  launcher?: {
+    teaserTexts: string[];
+    avatarUrl: string | null;
+  };
   examOptions: string[];
   medicalRequestOptions: string[];
   consultationNeeds: string[];

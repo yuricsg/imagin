@@ -1,18 +1,28 @@
 import type { AccentKey, Chatbot, ChatbotStatus } from "./types";
 import type {
   ChatbotFlowConfig,
+  DialogueFlow,
   FlowFieldKey,
   FlowTemplateId,
   FlowTone,
   InsuranceMode,
 } from "./flows";
-import { defaultFlowForTemplate, FLOW_TEMPLATES } from "./flows";
+import {
+  defaultFlowForTemplate,
+  FLOW_TEMPLATES,
+  normalizeDialogue,
+} from "./flows";
 import { buildTrackingFromInput } from "./tracking";
 import {
   buildWhatsAppFromInput,
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   EMPTY_WHATSAPP,
 } from "./whatsapp";
+import {
+  buildLauncherFromInput,
+  DEFAULT_LAUNCHER,
+  normalizeLauncher,
+} from "./launcher";
 import { slugify } from "../format";
 
 /** localStorage key holding the bots created through the dashboard UI. */
@@ -90,6 +100,7 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
     ? collectRaw.filter(isFlowFieldKey)
     : [...templateDefaults.collectFields];
   const storedServices = cleanStringList(flowRaw?.services);
+  const dialogue = normalizeDialogue(flowRaw?.dialogue);
   const flow: ChatbotFlowConfig = {
     templateId,
     tone: isFlowTone(flowRaw?.tone) ? flowRaw.tone : templateDefaults.tone,
@@ -102,6 +113,7 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
       ? flowRaw.insuranceMode
       : templateDefaults.insuranceMode,
     insurances: cleanStringList(flowRaw?.insurances),
+    ...(dialogue ? { dialogue } : {}),
   };
 
   const trackingRaw =
@@ -182,6 +194,7 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
           ? embedRaw.scriptPath
           : DEFAULT_EMBED.scriptPath,
     },
+    launcher: normalizeLauncher(record.launcher),
   };
 }
 
@@ -206,11 +219,17 @@ export type ChatbotInput = {
   flowServices: string[];
   flowInsuranceMode: InsuranceMode;
   flowInsurances: string[];
+  /** Custom dialogue builder — always set for new bots; optional when editing legacy. */
+  flowDialogue?: DialogueFlow;
   gaMeasurementId: string;
   metaPixelId: string;
   whatsappEnabled: boolean;
   whatsappPhoneNumber: string;
   whatsappMessageTemplate: string;
+  /** One teaser line per entry; empty entries are dropped on save. */
+  launcherTeaserTexts: string[];
+  /** Custom avatar URL; null uses the built-in default (upload not wired yet). */
+  launcherAvatarUrl: string | null;
   apiBaseUrl: string;
   appBaseUrl: string;
   scriptPath: string;
@@ -223,10 +242,17 @@ function buildFlowFromInput(input: ChatbotInput): ChatbotFlowConfig {
       ? input.flowCollectFields
       : defaults.collectFields;
   const services = cleanStringList(input.flowServices);
+  const greeting = input.flowGreeting.trim();
+  const dialogue = normalizeDialogue(input.flowDialogue);
+
+  if (dialogue) {
+    dialogue.greeting = greeting || dialogue.greeting;
+  }
+
   return {
     templateId: input.flowTemplateId,
     tone: input.flowTone,
-    greeting: input.flowGreeting.trim(),
+    greeting,
     collectFields,
     services: services.length > 0 ? services : [...defaults.services],
     insuranceMode: input.flowInsuranceMode,
@@ -234,6 +260,7 @@ function buildFlowFromInput(input: ChatbotInput): ChatbotFlowConfig {
       input.flowInsuranceMode === "particular"
         ? []
         : cleanStringList(input.flowInsurances),
+    ...(dialogue ? { dialogue } : {}),
   };
 }
 
@@ -267,6 +294,7 @@ export function buildChatbot(
       appBaseUrl: input.appBaseUrl.trim(),
       scriptPath: input.scriptPath.trim(),
     },
+    launcher: buildLauncherFromInput(input),
   };
 }
 
@@ -286,11 +314,16 @@ export function chatbotToInput(bot: Chatbot): ChatbotInput {
     flowServices: [...safe.flow.services],
     flowInsuranceMode: safe.flow.insuranceMode,
     flowInsurances: [...safe.flow.insurances],
+    flowDialogue: safe.flow.dialogue
+      ? structuredClone(safe.flow.dialogue)
+      : undefined,
     gaMeasurementId: safe.tracking.gaMeasurementId ?? "",
     metaPixelId: safe.tracking.metaPixelId ?? "",
     whatsappEnabled: safe.whatsapp.enabled,
     whatsappPhoneNumber: safe.whatsapp.phoneNumber,
     whatsappMessageTemplate: safe.whatsapp.messageTemplate,
+    launcherTeaserTexts: [...(safe.launcher ?? DEFAULT_LAUNCHER).teaserTexts],
+    launcherAvatarUrl: (safe.launcher ?? DEFAULT_LAUNCHER).avatarUrl,
     apiBaseUrl: safe.embed.apiBaseUrl,
     appBaseUrl: safe.embed.appBaseUrl,
     scriptPath: safe.embed.scriptPath,
@@ -315,6 +348,7 @@ export function updateChatbot(existing: Chatbot, input: ChatbotInput): Chatbot {
       appBaseUrl: input.appBaseUrl.trim(),
       scriptPath: input.scriptPath.trim(),
     },
+    launcher: buildLauncherFromInput(input),
   };
 }
 

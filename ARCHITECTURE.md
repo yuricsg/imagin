@@ -18,7 +18,7 @@ The repository currently contains a Next.js dashboard in `dashboard/` and a Hono
 - Authentication: not configured.
 - Multi-client model: `botId` and `clientId` are accepted, stored, listed, and filterable, but there is no authenticated organization/client model yet.
 
-The current MVP proves the embed-to-dashboard lead path with a production database, while authentication and a visual bot editor are still future work.
+The current MVP proves the embed-to-dashboard lead path with a production database. Authentication remains future work. A dialogue builder for new bots is available in the dedicated create/edit wizard pages (`/chatbots/new`, `/chatbots/[botId]/edit`); legacy bots keep their existing runtime.
 
 ## Product Goal
 
@@ -44,6 +44,29 @@ Dashboard-managed bots can choose one conversation flow:
 - `consultation_scheduling`: consultation scheduling only.
 - `urgent_triage`: urgent triage only.
 
+### Custom dialogue builder (new bots)
+
+New bots created on `/chatbots/new` (or edited on `/chatbots/[botId]/edit`) can define a `DialogueFlow` stored on `Chatbot.flow.dialogue`:
+
+- `shape`: `linear` (fixed step order) or `branching` (each single-choice option may point to another step or end).
+- `steps[]`: each step has `question`, `inputType` (`text` | `single_choice` | `multi_choice`), optional `options`, and optional `mapsTo` (`name` | `phone` | `email` | `message`).
+- `greeting` / `startStepId`: opening message and first step after greeting.
+
+**Runtime rule:** if `dashboardConfig.flow.dialogue` is present with `version: 1` and at least one step, the embed widget runs the generic dialogue interpreter. Bots without `dialogue` (including Dra. Renata Reis and older dashboard bots) keep the legacy intent-based cardiology state machine.
+
+Custom-dialogue lead submissions send `flowMode: "custom_dialogue"` plus optional `answers`, `phone`, `email`, and `message`. Legacy intent validation is skipped for that mode.
+
+### Site launcher (bubble + avatar)
+
+Dashboard bots store `Chatbot.launcher`:
+
+- `teaserTexts: string[]` — rotating lines inside the speech bubble (required, at least one).
+- `avatarUrl: string | null` — custom photo URL or built-in preset path (`/embed/robot-helper.png`, `/embed/robot-helper-feminine.png`); `null` uses the friendly cartoon robot. Custom photo upload UI exists in the wizard but is disabled (“Em desenvolvimento”) until storage is wired.
+
+On create/update, the dashboard API mirrors `launcher.teaserTexts` into backend `buttonTexts` for compatibility. Public config (`GET /api/public/chatbots/:botId/config`) exposes `launcher` (from `dashboardConfig.launcher`, falling back to `buttonTexts`).
+
+`flow.tone` (`friendly` | `formal`) rewrites stock dialogue copy when the operator toggles tone in the wizard: greeting, template prompts (service/insurance/etc.), contact-field questions, and the closing line. Operator-edited questions are left unchanged. Templates expose `greetingsByTone` / `promptsByTone`; `applyToneToDialogue(dialogue, tone, templateId)` applies the swap.
+
 ## Recommended Embed Strategy
 
 Use a small script loader on the client site that injects an iframe-hosted widget.
@@ -61,7 +84,9 @@ Example client install snippet:
 
 The script should:
 
-- Render the floating launcher button.
+- Render the floating site launcher as a speech bubble + avatar (not a plain pill button).
+- Rotate `launcher.teaserTexts` (or legacy `buttonTexts`) every few seconds while the panel is closed.
+- Use `launcher.avatarUrl` when set; otherwise `/embed/robot-helper.png` from the app origin. Built-in presets also include `/embed/robot-helper-feminine.png`.
 - Create an iframe only when the widget is opened, unless preloading is explicitly enabled.
 - Pass only public configuration to the iframe.
 - Use `postMessage` for parent/iframe resize, open, close, and analytics events.

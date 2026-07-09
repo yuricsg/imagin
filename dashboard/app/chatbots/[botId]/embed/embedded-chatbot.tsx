@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeStoredChatbot } from "@/lib/chatbots/create";
-import { resolveGreeting } from "@/lib/chatbots/flows";
+import { hasCustomDialogue, resolveGreeting } from "@/lib/chatbots/flows";
+import { CustomDialogueChat } from "./custom-dialogue-chat";
 
 type LeadIntent =
   | "schedule_exam"
@@ -274,9 +275,11 @@ export function EmbeddedChatbot({
 
   useEffect(() => {
     if (isConfigLoading || configError || introStartedRef.current) return;
+    const bot = resolveDashboardBot(config);
+    if (bot && hasCustomDialogue(bot.flow)) return;
     introStartedRef.current = true;
     void playBotMessages(resolveIntroMessages(config), () => setActiveStep("name"));
-  }, [configError, isConfigLoading, playBotMessages]);
+  }, [config, configError, isConfigLoading, playBotMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -310,6 +313,21 @@ export function EmbeddedChatbot({
   const canTriageUrgency = allowedIntents.includes("severe_symptoms");
   const dashBot = useMemo(() => resolveDashboardBot(config), [config]);
   const isFormal = dashBot?.flow.tone === "formal";
+  const usesCustomDialogue = Boolean(
+    dashBot && hasCustomDialogue(dashBot.flow),
+  );
+
+  if (!isConfigLoading && !configError && usesCustomDialogue && dashBot) {
+    return (
+      <CustomDialogueChat
+        bot={dashBot}
+        botId={botId}
+        clientId={clientId}
+        source={source}
+        parentOrigin={parentOrigin}
+      />
+    );
+  }
 
   function submitName() {
     const trimmedName = name.trim();
@@ -677,10 +695,10 @@ function TypingIndicator() {
       <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#205ea8] text-[10px] font-bold text-white">
         A
       </div>
-      <div className="flex h-10 items-center gap-1 rounded-2xl rounded-bl-sm bg-[#f0f4fb] px-3">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#7d8da8] [animation-delay:-0.2s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#7d8da8] [animation-delay:-0.1s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#7d8da8]" />
+      <div className="flex h-10 items-center gap-1.5 rounded-2xl rounded-bl-sm bg-[#f0f4fb] px-3">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#7d8da8] opacity-40 motion-safe:animate-pulse" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[#7d8da8] opacity-70 motion-safe:animate-pulse [animation-delay:150ms]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[#7d8da8] motion-safe:animate-pulse [animation-delay:300ms]" />
       </div>
     </div>
   );

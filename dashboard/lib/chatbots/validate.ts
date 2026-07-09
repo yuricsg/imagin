@@ -1,5 +1,5 @@
 import type { ChatbotInput } from "./create";
-import { FLOW_TEMPLATES } from "./flows";
+import { FLOW_TEMPLATES, validateDialogueFlow } from "./flows";
 import { isValidGaMeasurementId, isValidMetaPixelId } from "./tracking";
 import { isValidWhatsAppPhone } from "./whatsapp";
 
@@ -38,6 +38,14 @@ export function validateChatbotInput(input: ChatbotInput): ChatbotFieldErrors | 
     errors.flowCollectFields = "Selecione ao menos um dado para o bot coletar.";
   }
 
+  // New bots always send flowDialogue; legacy edits may omit it.
+  if (input.flowDialogue) {
+    const dialogueIssues = validateDialogueFlow(input.flowDialogue);
+    if (dialogueIssues.length > 0) {
+      errors.flowDialogue = dialogueIssues[0].message;
+    }
+  }
+
   const gaId = input.gaMeasurementId.trim();
   if (gaId && !isValidGaMeasurementId(gaId)) {
     errors.gaMeasurementId =
@@ -63,6 +71,14 @@ export function validateChatbotInput(input: ChatbotInput): ChatbotFieldErrors | 
       errors.whatsappMessageTemplate =
         "Escreva a mensagem que será enviada ao abrir o WhatsApp.";
     }
+  }
+
+  const teasers = (input.launcherTeaserTexts ?? [])
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (teasers.length === 0) {
+    errors.launcherTeaserTexts =
+      "Escreva ao menos uma frase para o balão do site.";
   }
 
   const apiBaseUrl = input.apiBaseUrl.trim();

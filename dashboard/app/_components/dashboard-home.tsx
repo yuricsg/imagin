@@ -1,25 +1,23 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import type { Chatbot, Client, LeadStatus } from "@/lib/chatbots/types";
 import type { DashboardData } from "@/lib/dashboard";
 import { ACCENTS } from "@/lib/chatbots/accents";
 import { computeMetrics } from "@/lib/metrics";
 import {
-  buildChatbot,
   getCreatedBots,
   getServerCreatedBots,
   saveCreatedBots,
   subscribeCreatedBots,
-  updateChatbot,
   normalizeStoredChatbot,
-  type ChatbotInput,
 } from "@/lib/chatbots/create";
-import { apiCreateChatbot, apiUpdateChatbot, apiDeleteChatbot } from "@/lib/api/chatbots";
+import { apiDeleteChatbot } from "@/lib/api/chatbots";
 import { MetricsRow } from "./metrics-row";
 import { ChatbotList } from "./chatbot-list";
 import { EmbedBlock } from "./embed-block";
-import { ChatbotForm } from "./chatbot-form";
 import { LeadsToolbar, type PeriodFilter } from "./leads-toolbar";
 import { LeadsTable } from "./leads-table";
 import { EmptyState } from "./ui";
@@ -38,17 +36,14 @@ function periodThreshold(period: PeriodFilter, nowMs: number): number | null {
 }
 
 export function DashboardHome({ data }: { data: DashboardData }) {
+  const router = useRouter();
   const { bots: serverBots, leads, botActivity, dbBotIds, nowMs } = data;
 
-  const [showForm, setShowForm] = useState(false);
-  const [editingBot, setEditingBot] = useState<Chatbot | null>(null);
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [clientId, setClientId] = useState<string>("all");
   const [status, setStatus] = useState<LeadStatus | "all">("all");
   const [period, setPeriod] = useState<PeriodFilter>("all");
-  // Client-side overrides for bots edited this session (id → updated Chatbot).
-  const [clientUpdates, setClientUpdates] = useState<Map<string, Chatbot>>(new Map());
   // IDs of bots deleted this session — filtered out immediately without page reload.
   const [deletedBotIds, setDeletedBotIds] = useState<Set<string>>(new Set());
 
@@ -68,12 +63,14 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const bots = useMemo(() => {
     const visibleServer = serverBots
       .filter((b) => !deletedBotIds.has(b.id))
-      .map((b) => clientUpdates.get(b.id) ?? b);
+      .map((b) => {
+        const local = createdBots.find((c) => c.id === b.id);
+        return local ?? b;
+      });
     const visibleLocal = createdBots
-      .filter((b) => !serverBotIds.has(b.id) && !deletedBotIds.has(b.id))
-      .map((b) => clientUpdates.get(b.id) ?? b);
+      .filter((b) => !serverBotIds.has(b.id) && !deletedBotIds.has(b.id));
     return [...visibleServer, ...visibleLocal];
-  }, [serverBots, createdBots, serverBotIds, deletedBotIds, clientUpdates]);
+  }, [serverBots, createdBots, serverBotIds, deletedBotIds]);
 
   // A bot is editable if it is in localStorage (just created, pre-sync)
   // OR if it was fetched from the DB (dbBotIds) — which happens after page reload.
@@ -109,37 +106,6 @@ export function DashboardHome({ data }: { data: DashboardData }) {
 
   const selectedBot = selectedBotId ? botsById[selectedBotId] ?? null : null;
 
-  function handleCreate(input: ChatbotInput): Chatbot {
-    const existingIds = new Set(bots.map((bot) => bot.id));
-    const bot = buildChatbot(input, existingIds, Date.now());
-    // Save to localStorage immediately for instant UI feedback.
-    saveCreatedBots([...createdBots, bot]);
-    setSelectedBotId(bot.id);
-    // Persist to DB in the background; on next page load server provides the bot.
-    apiCreateChatbot(bot).catch((err) =>
-      console.warn("Failed to save bot to API:", err),
-    );
-    return bot;
-  }
-
-  function handleUpdate(input: ChatbotInput): Chatbot {
-    if (!editingBot) {
-      throw new Error("handleUpdate called without editingBot");
-    }
-    const base = normalizeStoredChatbot(editingBot) ?? editingBot;
-    const updated = updateChatbot(base, input);
-    // Update in localStorage (for local bots) and in the client override map (for server bots).
-    saveCreatedBots(
-      createdBots.map((bot) => (bot.id === updated.id ? updated : bot)),
-    );
-    setClientUpdates((prev) => new Map(prev).set(updated.id, updated));
-    setSelectedBotId(updated.id);
-    apiUpdateChatbot(updated).catch((err) =>
-      console.warn("Failed to update bot in API:", err),
-    );
-    return updated;
-  }
-
   function handleDelete(id: string) {
     // Remove from localStorage, mark as deleted client-side, and delete from DB.
     saveCreatedBots(createdBots.filter((bot) => bot.id !== id));
@@ -148,11 +114,6 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     apiDeleteChatbot(id).catch((err) =>
       console.warn("Failed to delete bot from API:", err),
     );
-  }
-
-  function closeForm() {
-    setShowForm(false);
-    setEditingBot(null);
   }
 
   const filteredLeads = useMemo(() => {
@@ -205,14 +166,10 @@ export function DashboardHome({ data }: { data: DashboardData }) {
             {bots.length} {bots.length === 1 ? "chatbot" : "chatbots"} ·{" "}
             {clients.length} {clients.length === 1 ? "cliente" : "clientes"}
           </p>
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="btn-brand px-4 py-2.5"
-          >
+          <Link href="/chatbots/new" className="btn-brand px-4 py-2.5">
             <IconPlus className="size-4" />
             Novo chatbot
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -232,14 +189,10 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               acompanhe os leads aqui no painel — com origem do Google, Meta e
               campanhas quando configurado.
             </p>
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="btn-brand px-4 py-2"
-            >
+            <Link href="/chatbots/new" className="btn-brand inline-flex px-4 py-2">
               <IconPlus className="size-4" />
               Criar primeiro chatbot
-            </button>
+            </Link>
           </div>
         </section>
       ) : null}
@@ -322,10 +275,10 @@ export function DashboardHome({ data }: { data: DashboardData }) {
             selectedBotId={selectedBotId}
             editableBotIds={editableBotIds}
             onSelect={setSelectedBotId}
-            onCreate={() => setShowForm(true)}
+            onCreate={() => router.push("/chatbots/new")}
             onEdit={(bot) => {
               const normalized = normalizeStoredChatbot(bot);
-              if (normalized) setEditingBot(normalized);
+              if (normalized) router.push(`/chatbots/${normalized.id}/edit`);
             }}
             onDelete={handleDelete}
             nowMs={nowMs}
@@ -344,16 +297,6 @@ export function DashboardHome({ data }: { data: DashboardData }) {
           )}
         </div>
       </div>
-
-      {showForm || editingBot ? (
-        <ChatbotForm
-          key={editingBot?.id ?? "new"}
-          onClose={closeForm}
-          onCreate={handleCreate}
-          initialBot={editingBot ?? undefined}
-          onUpdate={editingBot ? handleUpdate : undefined}
-        />
-      ) : null}
     </main>
   );
 }

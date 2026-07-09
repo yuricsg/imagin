@@ -27,6 +27,8 @@ const validInput: ChatbotInput = {
   whatsappEnabled: false,
   whatsappPhoneNumber: "",
   whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  launcherTeaserTexts: ["Olá! Posso te ajudar?"],
+  launcherAvatarUrl: null,
   ...DEFAULT_EMBED,
 };
 
@@ -137,6 +139,17 @@ describe("validateChatbotInput", () => {
         "Informe o número do WhatsApp com DDI e DDD, ex.: +55 11 99999-0000.",
       whatsappMessageTemplate:
         "Escreva a mensagem que será enviada ao abrir o WhatsApp.",
+    });
+  });
+
+  it("requires at least one launcher teaser line", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        launcherTeaserTexts: ["  ", ""],
+      }),
+    ).toMatchObject({
+      launcherTeaserTexts: "Escreva ao menos uma frase para o balão do site.",
     });
   });
 });

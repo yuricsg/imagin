@@ -35,4 +35,12 @@ export const renataReis: Chatbot = {
     appBaseUrl: "https://app.imagin.app",
     scriptPath: "/embed/widget.js",
   },
+  launcher: {
+    teaserTexts: [
+      "Consultas e exames em um só lugar! Agende agora!",
+      "Quer agendar um exame? Eu te ajudo!",
+      "Precisa de uma consulta? Clique aqui!",
+    ],
+    avatarUrl: null,
+  },
 };

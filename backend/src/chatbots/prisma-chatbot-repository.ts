@@ -75,6 +75,9 @@ export class PrismaChatbotRepository implements ChatbotRepository {
             defaultConsultationNeeds,
           ),
         }),
+        ...(input.buttonTexts !== undefined && {
+          buttonTexts: normalizeList(input.buttonTexts, defaultButtonTexts),
+        }),
         ...(input.dashboardConfig !== undefined && {
           dashboardConfig: input.dashboardConfig as Prisma.InputJsonValue,
         }),
@@ -144,7 +147,8 @@ function toChatbotDefinition(row: Awaited<ReturnType<PrismaClient["bot"]["create
     medicalRequestOptions: row.medicalRequestOptions,
     consultationNeeds: row.consultationNeeds,
     consultationDecisions: row.consultationDecisions,
-    formatWhatsAppMessage: formatStandardWhatsAppMessage,
+    formatWhatsAppMessage: (lead) =>
+      formatStandardWhatsAppMessage(lead, row.dashboardConfig ?? undefined),
   };
 }
 

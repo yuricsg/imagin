@@ -39,6 +39,16 @@ export type LeadSubmission = {
   medicalRequestStatus?: string;
   consultationNeed?: string;
   consultationDecision?: string;
+  /** Optional contact fields from custom dialogue mapsTo. */
+  phone?: string;
+  email?: string;
+  message?: string;
+  /** Custom saveAs categories from the dialogue builder. */
+  customFields?: Record<string, string>;
+  /** Step answers from the custom dialogue interpreter (bots with dialogue v1). */
+  answers?: Record<string, string | string[]>;
+  /** When "custom_dialogue", intent branching rules are relaxed. */
+  flowMode?: "legacy" | "custom_dialogue";
   source: LeadSource;
 };
 

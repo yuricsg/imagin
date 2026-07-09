@@ -120,6 +120,15 @@ export function IconX(props: IconProps) {
   );
 }
 
+export function IconArrowLeft(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </Icon>
+  );
+}
+
 export function IconAlert(props: IconProps) {
   return (
     <Icon {...props}>

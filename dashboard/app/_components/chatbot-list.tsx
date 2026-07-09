@@ -6,6 +6,7 @@ import type { BotActivity } from "@/lib/metrics";
 import { ACCENTS } from "@/lib/chatbots/accents";
 import { BOT_STATUS } from "@/lib/labels";
 import { relativeTime } from "@/lib/format";
+import { resolveLauncherAvatarPath } from "@/lib/chatbots/launcher";
 import { Avatar, Badge, EmptyState } from "./ui";
 import { IconBot, IconPencil, IconPlus, IconTrash, IconX } from "./icons";
 
@@ -103,7 +104,11 @@ export function ChatbotList({
                       : "hover:bg-zinc-100/80 dark:hover:bg-zinc-800/50"
                   }`}
                 >
-                  <Avatar name={bot.name} className={accent.avatar} />
+                  <Avatar
+                    name={bot.name}
+                    className={accent.avatar}
+                    imageSrc={resolveLauncherAvatarPath(bot.launcher?.avatarUrl)}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">

@@ -23,6 +23,8 @@ const baseInput: ChatbotInput = {
   whatsappEnabled: false,
   whatsappPhoneNumber: "",
   whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  launcherTeaserTexts: ["Olá! Posso te ajudar?"],
+  launcherAvatarUrl: null,
   ...DEFAULT_EMBED,
 };
 
@@ -85,7 +87,26 @@ describe("buildChatbot", () => {
       appBaseUrl: "https://app.example.com",
       scriptPath: "/widget.js",
     });
+    expect(bot.launcher).toEqual({
+      teaserTexts: ["Olá! Posso te ajudar?"],
+      avatarUrl: null,
+    });
     expect(bot.createdAt).toBe(new Date(1_700_000_000_000).toISOString());
+  });
+
+  it("stores custom launcher teaser texts", () => {
+    const bot = buildChatbot(
+      {
+        ...baseInput,
+        launcherTeaserTexts: ["  Agende agora  ", "", "Fale conosco"],
+        launcherAvatarUrl: null,
+      },
+      new Set(),
+      1_700_000_000_000,
+    );
+
+    expect(bot.launcher.teaserTexts).toEqual(["Agende agora", "Fale conosco"]);
+    expect(bot.launcher.avatarUrl).toBeNull();
   });
 });
 
@@ -117,7 +138,43 @@ describe("chatbotToInput / updateChatbot", () => {
 });
 
 describe("normalizeStoredChatbot", () => {
-  it("fills missing flow and tracking for legacy localStorage entries", () => {
+  it("stores dialogue when provided on create", () => {
+    const dialogue = {
+      version: 1 as const,
+      shape: "linear" as const,
+      greeting: "",
+      startStepId: "s1",
+      steps: [
+        {
+          id: "s1",
+          question: "Como te chamo?",
+          inputType: "text" as const,
+          required: true,
+          mapsTo: "name" as const,
+        },
+        {
+          id: "s2",
+          question: "Escolha",
+          inputType: "single_choice" as const,
+          options: [
+            { id: "a", label: "A" },
+            { id: "b", label: "B" },
+          ],
+        },
+      ],
+    };
+    const bot = buildChatbot(
+      { ...baseInput, flowDialogue: dialogue },
+      new Set(),
+      1_700_000_000_000,
+    );
+    expect(bot.flow.dialogue?.steps).toHaveLength(2);
+    expect(chatbotToInput(bot).flowDialogue?.steps[0].question).toBe(
+      "Como te chamo?",
+    );
+  });
+
+  it("keeps legacy bots without dialogue after normalize", () => {
     const legacy = {
       id: "legacy-bot",
       name: "Bot Legado",
@@ -129,14 +186,25 @@ describe("normalizeStoredChatbot", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       embed: DEFAULT_EMBED,
     };
-
     const bot = normalizeStoredChatbot(legacy);
-    expect(bot).not.toBeNull();
-    expect(bot!.flow.templateId).toBe("patient-capture");
-    expect(bot!.tracking).toEqual({
-      gaMeasurementId: "",
-      metaPixelId: "",
+    expect(bot!.flow.dialogue).toBeUndefined();
+    expect(bot!.launcher).toEqual({
+      teaserTexts: ["Olá! Posso te ajudar?"],
+      avatarUrl: null,
     });
-    expect(() => chatbotToInput(bot!)).not.toThrow();
+  });
+
+  it("round-trips launcher fields through chatbotToInput", () => {
+    const bot = buildChatbot(
+      {
+        ...baseInput,
+        launcherTeaserTexts: ["Linha A", "Linha B"],
+      },
+      new Set(),
+      1_700_000_000_000,
+    );
+    const input = chatbotToInput(bot);
+    expect(input.launcherTeaserTexts).toEqual(["Linha A", "Linha B"]);
+    expect(input.launcherAvatarUrl).toBeNull();
   });
 });

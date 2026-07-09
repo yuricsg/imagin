@@ -2,7 +2,14 @@ export type ChatbotStatus = "active" | "paused" | "draft" | "error";
 
 export type {
   ChatbotFlowConfig,
+  DialogueFlow,
   FlowFieldKey,
+  FlowInputType,
+  FlowMapsTo,
+  FlowSaveAs,
+  FlowShape,
+  FlowStep,
+  FlowStepOption,
   FlowTemplateId,
   FlowTone,
   InsuranceMode,
@@ -31,6 +38,17 @@ export interface ChatbotEmbedConfig {
   scriptPath: string;
 }
 
+/** Floating site launcher (speech bubble + avatar) shown by the embed script. */
+export interface ChatbotLauncherConfig {
+  /** Rotating teaser lines inside the speech bubble (at least one). */
+  teaserTexts: string[];
+  /**
+   * Custom avatar image URL. `null` uses the built-in default at
+   * `/embed/default-avatar.png`. Upload is not wired yet.
+   */
+  avatarUrl: string | null;
+}
+
 export interface Chatbot {
   /** Stable catalog id, also the iframe route segment (e.g. "dra-renata-reis"). */
   id: string;
@@ -50,6 +68,8 @@ export interface Chatbot {
   /** Optional handoff to WhatsApp after the visitor fills the form. */
   whatsapp: ChatbotWhatsAppConfig;
   embed: ChatbotEmbedConfig;
+  /** Site launcher bubble + avatar (widget.js). */
+  launcher: ChatbotLauncherConfig;
 }
 
 export type AccentKey = "indigo" | "emerald" | "amber" | "sky" | "rose" | "violet";

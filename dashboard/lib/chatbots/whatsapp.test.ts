@@ -5,6 +5,7 @@ import {
   fillWhatsAppTemplate,
   isValidWhatsAppPhone,
   normalizeWhatsAppPhone,
+  listWhatsAppVariables,
   previewWhatsAppMessage,
   resolveWhatsAppMessage,
   whatsAppUrl,
@@ -78,5 +79,35 @@ describe("whatsapp", () => {
         { nome: "Ana" },
       ),
     ).toBe("Olá! Vim pelo dfgss");
+  });
+
+  it("lists custom Salvar como categories as WhatsApp variables", () => {
+    const vars = listWhatsAppVariables({
+      convenio: "Convênio",
+      horario: "Horário preferido",
+    });
+    expect(vars.some((v) => v.token === "convenio" && v.key === "{convenio}")).toBe(
+      true,
+    );
+    expect(vars.some((v) => v.token === "horario")).toBe(true);
+    expect(vars.some((v) => v.token === "nome")).toBe(true);
+  });
+
+  it("fills custom category placeholders in preview and resolve", () => {
+    expect(
+      previewWhatsAppMessage(
+        "Plano: {convenio}",
+        "Bot",
+        { convenio: "Convênio" },
+      ),
+    ).toContain("Convênio");
+    expect(
+      resolveWhatsAppMessage(
+        "Plano: {convenio}",
+        "Bot",
+        { convenio: "Unimed" },
+        { convenio: "Convênio" },
+      ),
+    ).toBe("Plano: Unimed");
   });
 });

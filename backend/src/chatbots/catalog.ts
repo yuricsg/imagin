@@ -29,6 +29,41 @@ export function buildWhatsAppUrl(chatbot: ChatbotDefinition, message: string) {
   return `${target}?text=${encodeURIComponent(message)}`;
 }
 
+function readLauncherFromDashboardConfig(
+  dashboardConfig: unknown,
+  buttonTexts: string[],
+): { teaserTexts: string[]; avatarUrl: string | null } {
+  const fallbackTexts =
+    buttonTexts.length > 0 ? buttonTexts : ["Olá! Posso te ajudar?"];
+
+  if (!dashboardConfig || typeof dashboardConfig !== "object") {
+    return { teaserTexts: fallbackTexts, avatarUrl: null };
+  }
+
+  const record = dashboardConfig as Record<string, unknown>;
+  const launcherRaw = record.launcher;
+  if (!launcherRaw || typeof launcherRaw !== "object") {
+    return { teaserTexts: fallbackTexts, avatarUrl: null };
+  }
+
+  const launcher = launcherRaw as Record<string, unknown>;
+  const teasers = Array.isArray(launcher.teaserTexts)
+    ? launcher.teaserTexts
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    : [];
+  const avatarUrl =
+    typeof launcher.avatarUrl === "string" && launcher.avatarUrl.trim()
+      ? launcher.avatarUrl.trim()
+      : null;
+
+  return {
+    teaserTexts: teasers.length > 0 ? teasers : fallbackTexts,
+    avatarUrl,
+  };
+}
+
 function toPublicChatbotConfig(
   chatbot: ChatbotDefinition,
 ): PublicChatbotConfig {
@@ -39,8 +74,17 @@ function toPublicChatbotConfig(
     ...publicConfig
   } = chatbot;
 
+  const launcher =
+    chatbot.launcher ??
+    readLauncherFromDashboardConfig(
+      chatbot.dashboardConfig,
+      chatbot.buttonTexts,
+    );
+
   return {
     ...publicConfig,
+    launcher,
+    buttonTexts: launcher.teaserTexts,
     conversationFlow: getConversationFlow(chatbot.flowKey),
     dashboardConfig: chatbot.dashboardConfig,
     integrationStatus: {
