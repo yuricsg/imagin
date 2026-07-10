@@ -103,6 +103,33 @@ The iframe should:
 
 This approach is preferred over giving clients a raw iframe because the script keeps installation simple while the iframe isolates CSS, JavaScript, storage, and future UI changes. Shadow DOM can be revisited later for a lighter native-feeling widget, but iframe isolation is the safer default for many unrelated client websites.
 
+## WhatsApp Handoff and Multi-Number Routing
+
+A bot may hand off to more than one WhatsApp number — one per office, for a
+doctor who sees patients in several states. The numbers live in the bot's
+`dashboardConfig.whatsapp`:
+
+- `destinations`: `{ id, label, phoneNumber }[]`, one entry per office. `label`
+  is what the visitor picks; `phoneNumber` is digits-only with country code.
+- `routingQuestion`: asked right before the handoff.
+- `phoneNumber`: mirrors `destinations[0]`, kept so consumers that do not route
+  (the legacy widget flow, the `bots.whatsappPhone` column) keep working.
+
+With a single destination the flow is unchanged. With two or more, the widget
+appends a routing step after the last dialogue question, sends the visitor's
+pick as `whatsappDestinationId` on the lead payload, and also exposes the chosen
+office to the message template as `{unidade}`.
+
+The backend resolves the destination in `buildWhatsAppUrl` (`chatbots/catalog.ts`)
+by looking the id up in `dashboardConfig.whatsapp.destinations`, falling back to
+the bot's primary `whatsappPhone` when the id is absent or unknown. The resolved
+link is what gets stored on `leads.whatsappUrl`. Destinations live inside the
+existing `dashboardConfig` JSON column, so adding an office needs no migration.
+
+Bots saved before routing existed carry only `whatsapp.phoneNumber`; the
+dashboard migrates them into a single unnamed destination on read
+(`normalizeWhatsAppDestinations`).
+
 ## Suggested Routes
 
 Use the Hono backend for APIs and the Next.js dashboard for the widget UI.
@@ -143,7 +170,7 @@ Core entities:
 - `clients`
   - Represents a customer/site where a bot is installed.
 - `chatbots`
-  - Stores bot metadata, public slug, active status, `flowKey`, and default WhatsApp destination.
+  - Stores bot metadata, public slug, active status, `flowKey`, and the primary WhatsApp destination. Additional per-office destinations live in the `dashboardConfig` JSON.
 - `chatbot_versions`
   - Stores versioned flow definitions so historic leads remain explainable after bot edits.
 - `chat_sessions`

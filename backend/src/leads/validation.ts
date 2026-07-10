@@ -65,6 +65,11 @@ export function validateLeadSubmission(
   const customFields = readStringRecord(rawBody.customFields);
   if (customFields) submission.customFields = customFields;
 
+  const whatsappDestinationId = readOptionalString(rawBody.whatsappDestinationId);
+  if (whatsappDestinationId) {
+    submission.whatsappDestinationId = whatsappDestinationId;
+  }
+
   if (isCustomDialogue) {
     if (issues.length > 0) {
       return { ok: false, issues };
@@ -141,7 +146,11 @@ export function buildLeadRecordInput(
   return {
     ...submission,
     whatsappMessage,
-    whatsappUrl: buildWhatsAppUrl(chatbot, whatsappMessage),
+    whatsappUrl: buildWhatsAppUrl(
+      chatbot,
+      whatsappMessage,
+      submission.whatsappDestinationId,
+    ),
   };
 }
 

@@ -52,6 +52,8 @@ function valuesFromCustomDialogueLead(
     telefone: lead.phone ?? "",
     email: lead.email ?? "",
     mensagem: lead.message ?? "",
+    // Set by the widget when the visitor picks one of several offices.
+    unidade: "",
     ...(lead.customFields ?? {}),
   };
 }

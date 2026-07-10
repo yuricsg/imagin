@@ -22,8 +22,46 @@ export function getPublicChatbotConfig(botId: string): PublicChatbotConfig | nul
   return chatbot ? toPublicChatbotConfig(chatbot) : null;
 }
 
-export function buildWhatsAppUrl(chatbot: ChatbotDefinition, message: string) {
-  const phone = chatbot.whatsappPhone.replace(/\D/g, "");
+/**
+ * Resolves the number a lead should be handed off to. Bots created with several
+ * offices carry them in `dashboardConfig.whatsapp.destinations`; the visitor's
+ * pick arrives as `destinationId`. Anything unresolved falls back to the bot's
+ * primary `whatsappPhone`, so single-number bots are unaffected.
+ */
+export function resolveWhatsAppPhone(
+  chatbot: ChatbotDefinition,
+  destinationId?: string,
+): string {
+  const fallback = chatbot.whatsappPhone.replace(/\D/g, "");
+  if (!destinationId) return fallback;
+
+  const config = chatbot.dashboardConfig;
+  if (!config || typeof config !== "object") return fallback;
+  const whatsapp = (config as { whatsapp?: unknown }).whatsapp;
+  if (!whatsapp || typeof whatsapp !== "object") return fallback;
+  const destinations = (whatsapp as { destinations?: unknown }).destinations;
+  if (!Array.isArray(destinations)) return fallback;
+
+  for (const entry of destinations) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    if (record.id !== destinationId) continue;
+    const phone =
+      typeof record.phoneNumber === "string"
+        ? record.phoneNumber.replace(/\D/g, "")
+        : "";
+    if (phone) return phone;
+  }
+
+  return fallback;
+}
+
+export function buildWhatsAppUrl(
+  chatbot: ChatbotDefinition,
+  message: string,
+  destinationId?: string,
+) {
+  const phone = resolveWhatsAppPhone(chatbot, destinationId);
   const target = phone ? `https://wa.me/${phone}` : "https://wa.me/";
 
   return `${target}?text=${encodeURIComponent(message)}`;

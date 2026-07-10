@@ -1,11 +1,32 @@
 /** WhatsApp handoff — optional redirect after the bot collects lead data. */
 
+/**
+ * One WhatsApp number the visitor can be routed to — e.g. a doctor's office in
+ * a given state. With two or more, the bot asks `routingQuestion` at the end of
+ * the dialogue and opens the number the visitor picked.
+ */
+export interface WhatsAppDestination {
+  /** Stable id — referenced by the lead payload so the backend picks the number. */
+  id: string;
+  /** What the visitor sees in the routing question, e.g. "Consultório de SP". */
+  label: string;
+  /** Digits only, incl. country code (e.g. 5511…). */
+  phoneNumber: string;
+}
+
 export interface ChatbotWhatsAppConfig {
   /** When true, the widget shows a button to continue on WhatsApp. */
   enabled: boolean;
-  /** Destination number — stored with digits only (incl. country code, e.g. 5511…). */
+  /**
+   * Primary number — mirrors `destinations[0]`. Kept so consumers that don't
+   * route (legacy widget flow, backend `whatsappPhone` column) keep working.
+   */
   phoneNumber: string;
-  /** Pre-filled message; placeholders: {bot}, {nome}, {telefone}, {email}, {mensagem}, + custom saveAs keys. */
+  /** One entry per office/number. Single entry means no routing question. */
+  destinations: WhatsAppDestination[];
+  /** Asked before the handoff when there is more than one destination. */
+  routingQuestion: string;
+  /** Pre-filled message; placeholders: {bot}, {nome}, {telefone}, {email}, {mensagem}, {unidade}, + custom saveAs keys. */
   messageTemplate: string;
 }
 
@@ -23,11 +44,28 @@ Telefone: {telefone}
 E-mail: {email}
 Assunto: {mensagem}`;
 
+export const DEFAULT_WHATSAPP_ROUTING_QUESTION =
+  "Para qual unidade você prefere ser atendido?";
+
 export const EMPTY_WHATSAPP: ChatbotWhatsAppConfig = {
   enabled: false,
   phoneNumber: "",
+  destinations: [],
+  routingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
   messageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
 };
+
+let destinationCounter = 0;
+
+/** Ids only need to be unique within one bot's destination list. */
+export function createDestinationId(): string {
+  destinationCounter += 1;
+  return `wa-${Date.now().toString(36)}-${destinationCounter}`;
+}
+
+export function emptyDestination(): WhatsAppDestination {
+  return { id: createDestinationId(), label: "", phoneNumber: "" };
+}
 
 /** Built-in placeholders always available in the WhatsApp message editor. */
 export const WHATSAPP_BUILTIN_VARIABLES: WhatsAppVariable[] = [
@@ -62,6 +100,13 @@ export const WHATSAPP_BUILTIN_VARIABLES: WhatsAppVariable[] = [
     label: "Assunto / mensagem",
     description: "Primeira intenção ou mensagem capturada pelo bot",
   },
+  {
+    key: "{unidade}",
+    token: "unidade",
+    label: "Unidade escolhida",
+    description:
+      "Consultório que o visitante escolheu — fica vazio quando há um único número",
+  },
 ];
 
 /** @deprecated Prefer WHATSAPP_BUILTIN_VARIABLES or listWhatsAppVariables(). */
@@ -72,6 +117,7 @@ const SAMPLE_VALUES: Record<string, string> = {
   telefone: "(11) 98765-4321",
   email: "maria@email.com",
   mensagem: "Gostaria de agendar uma consulta.",
+  unidade: "Consultório São Paulo",
 };
 
 /** Builds WhatsApp chips from custom "Salvar como" categories on the dialogue. */
@@ -116,24 +162,93 @@ export function isValidWhatsAppPhone(value: string): boolean {
   return digits.length >= 10 && digits.length <= 15;
 }
 
+/**
+ * Drops blank rows, normalizes phones and guarantees unique ids. Accepts the
+ * legacy single `phoneNumber` shape so bots saved before routing existed keep
+ * their number.
+ */
+export function normalizeWhatsAppDestinations(
+  raw: unknown,
+  legacyPhoneNumber = "",
+): WhatsAppDestination[] {
+  const entries = Array.isArray(raw) ? raw : [];
+  const seenIds = new Set<string>();
+  const out: WhatsAppDestination[] = [];
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const phoneNumber = normalizeWhatsAppPhone(
+      typeof record.phoneNumber === "string" ? record.phoneNumber : "",
+    );
+    if (!phoneNumber) continue;
+    const label =
+      typeof record.label === "string" ? record.label.trim() : "";
+    let id =
+      typeof record.id === "string" && record.id.trim()
+        ? record.id.trim()
+        : createDestinationId();
+    while (seenIds.has(id)) id = createDestinationId();
+    seenIds.add(id);
+    out.push({ id, label, phoneNumber });
+  }
+
+  if (out.length > 0) return out;
+
+  const legacy = normalizeWhatsAppPhone(legacyPhoneNumber);
+  return legacy
+    ? [{ id: createDestinationId(), label: "", phoneNumber: legacy }]
+    : [];
+}
+
+/** The number the visitor is sent to; falls back to the first destination. */
+export function resolveWhatsAppDestination(
+  config: Pick<ChatbotWhatsAppConfig, "destinations" | "phoneNumber">,
+  destinationId?: string | null,
+): WhatsAppDestination | null {
+  const destinations =
+    config.destinations?.length > 0
+      ? config.destinations
+      : config.phoneNumber
+        ? [{ id: "primary", label: "", phoneNumber: config.phoneNumber }]
+        : [];
+  if (destinations.length === 0) return null;
+  if (destinationId) {
+    const match = destinations.find((entry) => entry.id === destinationId);
+    if (match) return match;
+  }
+  return destinations[0];
+}
+
+/** True when the bot must ask which office before opening WhatsApp. */
+export function needsWhatsAppRouting(
+  config: Pick<ChatbotWhatsAppConfig, "enabled" | "destinations">,
+): boolean {
+  return config.enabled && (config.destinations?.length ?? 0) > 1;
+}
+
 export function buildWhatsAppFromInput(input: {
   whatsappEnabled: boolean;
-  whatsappPhoneNumber: string;
+  whatsappDestinations: WhatsAppDestination[];
+  whatsappRoutingQuestion: string;
   whatsappMessageTemplate: string;
 }): ChatbotWhatsAppConfig {
+  const messageTemplate =
+    input.whatsappMessageTemplate.trim() || DEFAULT_WHATSAPP_MESSAGE_TEMPLATE;
+  const routingQuestion =
+    input.whatsappRoutingQuestion.trim() || DEFAULT_WHATSAPP_ROUTING_QUESTION;
+
   if (!input.whatsappEnabled) {
-    return {
-      enabled: false,
-      phoneNumber: "",
-      messageTemplate:
-        input.whatsappMessageTemplate.trim() || DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
-    };
+    return { ...EMPTY_WHATSAPP, routingQuestion, messageTemplate };
   }
+
+  const destinations = normalizeWhatsAppDestinations(input.whatsappDestinations);
   return {
     enabled: true,
-    phoneNumber: normalizeWhatsAppPhone(input.whatsappPhoneNumber),
-    messageTemplate:
-      input.whatsappMessageTemplate.trim() || DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+    phoneNumber: destinations[0]?.phoneNumber ?? "",
+    destinations,
+    routingQuestion,
+    messageTemplate,
   };
 }
 
@@ -194,6 +309,7 @@ export function resolveWhatsAppMessage(
       telefone: lead.telefone ?? "",
       email: lead.email ?? "",
       mensagem: lead.mensagem ?? "",
+      unidade: lead.unidade ?? "",
       ...lead,
     },
     Object.keys(customSaveLabels ?? {}),
@@ -207,5 +323,10 @@ export function whatsAppUrl(phoneDigits: string, message: string): string {
 }
 
 export function hasWhatsAppConfigured(config: ChatbotWhatsAppConfig): boolean {
-  return config.enabled && config.phoneNumber.length >= 10;
+  if (!config.enabled) return false;
+  const destinations = config.destinations ?? [];
+  if (destinations.length > 0) {
+    return destinations.every((entry) => isValidWhatsAppPhone(entry.phoneNumber));
+  }
+  return config.phoneNumber.length >= 10;
 }

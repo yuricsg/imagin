@@ -1,6 +1,6 @@
 import type { Chatbot } from "./types";
 import { defaultFlowForTemplate } from "./flows";
-import { DEFAULT_WHATSAPP_MESSAGE_TEMPLATE } from "./whatsapp";
+import { DEFAULT_WHATSAPP_MESSAGE_TEMPLATE, EMPTY_WHATSAPP } from "./whatsapp";
 
 const flowDefaults = defaultFlowForTemplate("patient-capture");
 
@@ -26,8 +26,7 @@ export const renataReis: Chatbot = {
     metaPixelId: "",
   },
   whatsapp: {
-    enabled: false,
-    phoneNumber: "",
+    ...EMPTY_WHATSAPP,
     messageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   },
   embed: {

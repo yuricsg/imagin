@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildChatbot, chatbotToInput, DEFAULT_EMBED, normalizeStoredChatbot, updateChatbot, type ChatbotInput } from "./create";
 import { defaultFlowForTemplate } from "./flows";
-import { DEFAULT_WHATSAPP_MESSAGE_TEMPLATE } from "./whatsapp";
+import {
+  DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  DEFAULT_WHATSAPP_ROUTING_QUESTION,
+} from "./whatsapp";
 
 const baseFlow = defaultFlowForTemplate("patient-capture");
 
@@ -21,7 +24,8 @@ const baseInput: ChatbotInput = {
   gaMeasurementId: "",
   metaPixelId: "",
   whatsappEnabled: false,
-  whatsappPhoneNumber: "",
+  whatsappDestinations: [],
+  whatsappRoutingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
   whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   launcherTeaserTexts: ["Olá! Posso te ajudar?"],
   launcherAvatarUrl: null,

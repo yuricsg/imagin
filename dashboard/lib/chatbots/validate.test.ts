@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_EMBED, type ChatbotInput } from "./create";
 import { defaultFlowForTemplate } from "./flows";
-import { DEFAULT_WHATSAPP_MESSAGE_TEMPLATE } from "./whatsapp";
+import {
+  DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  DEFAULT_WHATSAPP_ROUTING_QUESTION,
+} from "./whatsapp";
 import {
   hasRequiredChatbotFields,
   validateChatbotInput,
@@ -25,7 +28,8 @@ const validInput: ChatbotInput = {
   gaMeasurementId: "",
   metaPixelId: "",
   whatsappEnabled: false,
-  whatsappPhoneNumber: "",
+  whatsappDestinations: [],
+  whatsappRoutingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
   whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   launcherTeaserTexts: ["Olá! Posso te ajudar?"],
   launcherAvatarUrl: null,
@@ -131,15 +135,113 @@ describe("validateChatbotInput", () => {
       validateChatbotInput({
         ...validInput,
         whatsappEnabled: true,
-        whatsappPhoneNumber: "",
+        whatsappDestinations: [],
         whatsappMessageTemplate: "",
       }),
     ).toMatchObject({
-      whatsappPhoneNumber:
+      whatsappDestinations:
         "Informe o número do WhatsApp com DDI e DDD, ex.: +55 11 99999-0000.",
       whatsappMessageTemplate:
         "Escreva a mensagem que será enviada ao abrir o WhatsApp.",
     });
+  });
+
+  it("accepts several destinations when each has a name and a number", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "Consultório SP", phoneNumber: "+55 11 99999-0000" },
+          { id: "b", label: "Consultório RJ", phoneNumber: "+55 21 98888-0000" },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("does not require a name for a single destination", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "", phoneNumber: "+55 11 99999-0000" },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("requires a name on every destination once there is more than one", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "Consultório SP", phoneNumber: "+55 11 99999-0000" },
+          { id: "b", label: "", phoneNumber: "+55 21 98888-0000" },
+        ],
+      }),
+    ).toMatchObject({
+      whatsappDestinations:
+        'Número 2: dê um nome ao consultório para o visitante escolher, ex.: "Consultório de SP".',
+    });
+  });
+
+  it("rejects duplicated numbers and duplicated names", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "SP", phoneNumber: "+55 11 99999-0000" },
+          { id: "b", label: "RJ", phoneNumber: "5511999990000" },
+        ],
+      }),
+    ).toMatchObject({
+      whatsappDestinations: "Número 2: este número já foi adicionado.",
+    });
+
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "Consultório SP", phoneNumber: "+55 11 99999-0000" },
+          { id: "b", label: "consultório sp", phoneNumber: "+55 21 98888-0000" },
+        ],
+      }),
+    ).toMatchObject({
+      whatsappDestinations:
+        "Número 2: já existe um consultório chamado “consultório sp”.",
+    });
+  });
+
+  it("requires a routing question only when there are several destinations", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappRoutingQuestion: "  ",
+        whatsappDestinations: [
+          { id: "a", label: "Consultório SP", phoneNumber: "+55 11 99999-0000" },
+          { id: "b", label: "Consultório RJ", phoneNumber: "+55 21 98888-0000" },
+        ],
+      }),
+    ).toMatchObject({
+      whatsappRoutingQuestion:
+        "Escreva a pergunta que o bot fará para escolher o consultório.",
+    });
+
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappRoutingQuestion: "  ",
+        whatsappDestinations: [
+          { id: "a", label: "", phoneNumber: "+55 11 99999-0000" },
+        ],
+      }),
+    ).toBeNull();
   });
 
   it("requires at least one launcher teaser line", () => {

@@ -45,9 +45,12 @@ import {
 } from "@/lib/chatbots/validate";
 import {
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  DEFAULT_WHATSAPP_ROUTING_QUESTION,
+  emptyDestination,
   previewWhatsAppMessage,
   listWhatsAppVariables,
   whatsAppUrl,
+  type WhatsAppDestination,
 } from "@/lib/chatbots/whatsapp";
 import {
   DEFAULT_LAUNCHER,
@@ -116,7 +119,11 @@ const STEPS = [
 const STEP_FIELDS: ReadonlyArray<ReadonlyArray<ChatbotField>> = [
   ["name", "clientName", "specialty"],
   ["flowTemplateId", "flowCollectFields", "flowDialogue"],
-  ["whatsappPhoneNumber", "whatsappMessageTemplate"],
+  [
+    "whatsappDestinations",
+    "whatsappRoutingQuestion",
+    "whatsappMessageTemplate",
+  ],
   ["launcherTeaserTexts"],
   ["gaMeasurementId", "metaPixelId", "apiBaseUrl", "appBaseUrl", "scriptPath"],
 ];
@@ -241,8 +248,15 @@ export function ChatbotForm({
   const [whatsappEnabled, setWhatsappEnabled] = useState(
     seed?.whatsappEnabled ?? false,
   );
-  const [whatsappPhoneNumber, setWhatsappPhoneNumber] = useState(
-    seed?.whatsappPhoneNumber ?? "",
+  const [whatsappDestinations, setWhatsappDestinations] = useState<
+    WhatsAppDestination[]
+  >(() =>
+    seed?.whatsappDestinations?.length
+      ? seed.whatsappDestinations.map((entry) => ({ ...entry }))
+      : [emptyDestination()],
+  );
+  const [whatsappRoutingQuestion, setWhatsappRoutingQuestion] = useState(
+    seed?.whatsappRoutingQuestion ?? DEFAULT_WHATSAPP_ROUTING_QUESTION,
   );
   const [whatsappMessageTemplate, setWhatsappMessageTemplate] = useState(
     seed?.whatsappMessageTemplate ?? DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
@@ -324,7 +338,8 @@ export function ChatbotForm({
       gaMeasurementId,
       metaPixelId,
       whatsappEnabled,
-      whatsappPhoneNumber,
+      whatsappDestinations,
+      whatsappRoutingQuestion,
       whatsappMessageTemplate,
       launcherTeaserTexts,
       launcherAvatarUrl,
@@ -336,11 +351,40 @@ export function ChatbotForm({
 
   function toggleWhatsappEnabled(next: boolean) {
     setWhatsappEnabled(next);
-    clearFieldError("whatsappPhoneNumber");
+    clearFieldError("whatsappDestinations");
+    clearFieldError("whatsappRoutingQuestion");
     clearFieldError("whatsappMessageTemplate");
     if (next && !whatsappMessageTemplate.trim()) {
       setWhatsappMessageTemplate(DEFAULT_WHATSAPP_MESSAGE_TEMPLATE);
     }
+  }
+
+  function updateDestination(
+    id: string,
+    patch: Partial<Omit<WhatsAppDestination, "id">>,
+  ) {
+    setWhatsappDestinations((current) =>
+      current.map((entry) =>
+        entry.id === id ? { ...entry, ...patch } : entry,
+      ),
+    );
+    clearFieldError("whatsappDestinations");
+  }
+
+  function addDestination() {
+    setWhatsappDestinations((current) => [...current, emptyDestination()]);
+    clearFieldError("whatsappDestinations");
+    if (!whatsappRoutingQuestion.trim()) {
+      setWhatsappRoutingQuestion(DEFAULT_WHATSAPP_ROUTING_QUESTION);
+    }
+  }
+
+  function removeDestination(id: string) {
+    setWhatsappDestinations((current) => {
+      const next = current.filter((entry) => entry.id !== id);
+      return next.length > 0 ? next : [emptyDestination()];
+    });
+    clearFieldError("whatsappDestinations");
   }
 
   function insertWhatsAppVariable(token: string) {
@@ -750,6 +794,7 @@ export function ChatbotForm({
   const whatsappVariables = listWhatsAppVariables(
     flowDialogue?.customSaveLabels,
   );
+  const hasMultipleDestinations = whatsappDestinations.length > 1;
   const flowPreview = buildFlowPreview(
     {
       templateId: flowTemplateId,
@@ -1778,29 +1823,96 @@ export function ChatbotForm({
 
                   {whatsappEnabled ? (
                     <>
-                      <Field
-                        label="Número do WhatsApp"
-                        required
-                        hint="Com DDI do país, ex.: +55 11 99999-0000"
-                        error={fieldErrors.whatsappPhoneNumber}
-                        htmlFor={`${formId}-whatsapp-phone`}
-                      >
-                        <input
-                          id={`${formId}-whatsapp-phone`}
-                          type="tel"
-                          autoComplete="tel"
-                          value={whatsappPhoneNumber}
-                          onChange={(e) => {
-                            setWhatsappPhoneNumber(e.target.value);
-                            clearFieldError("whatsappPhoneNumber");
-                          }}
-                          placeholder="+55 11 99999-0000"
-                          aria-invalid={Boolean(fieldErrors.whatsappPhoneNumber)}
-                          className={inputClass(
-                            Boolean(fieldErrors.whatsappPhoneNumber),
-                          )}
-                        />
-                      </Field>
+                      <div className="space-y-2">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                            Números do WhatsApp
+                            <span className="ml-1 text-rose-600 dark:text-rose-400">
+                              *
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={addDestination}
+                            className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:border-cyan-500 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-cyan-500 dark:hover:text-cyan-300"
+                          >
+                            + Adicionar consultório
+                          </button>
+                        </div>
+                        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                          Atende em mais de um lugar? Cadastre um número por
+                          consultório. Com dois ou mais, o bot pergunta ao
+                          visitante qual unidade ele prefere e abre o WhatsApp
+                          daquele consultório.
+                        </p>
+
+                        <div className="space-y-2">
+                          {whatsappDestinations.map((entry, index) => (
+                            <DestinationRow
+                              key={entry.id}
+                              index={index}
+                              destination={entry}
+                              showLabel={hasMultipleDestinations}
+                              canRemove={whatsappDestinations.length > 1}
+                              invalid={Boolean(fieldErrors.whatsappDestinations)}
+                              formId={formId}
+                              onChange={(patch) =>
+                                updateDestination(entry.id, patch)
+                              }
+                              onRemove={() => removeDestination(entry.id)}
+                            />
+                          ))}
+                        </div>
+
+                        {fieldErrors.whatsappDestinations ? (
+                          <p
+                            role="alert"
+                            className="text-xs text-rose-600 dark:text-rose-400"
+                          >
+                            {fieldErrors.whatsappDestinations}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            Use o DDI do país, ex.: +55 11 99999-0000.
+                          </p>
+                        )}
+                      </div>
+
+                      {hasMultipleDestinations ? (
+                        <>
+                          <Field
+                            label="Pergunta para escolher o consultório"
+                            required
+                            hint="O bot faz esta pergunta antes de abrir o WhatsApp"
+                            error={fieldErrors.whatsappRoutingQuestion}
+                            htmlFor={`${formId}-whatsapp-routing`}
+                          >
+                            <input
+                              id={`${formId}-whatsapp-routing`}
+                              value={whatsappRoutingQuestion}
+                              onChange={(e) => {
+                                setWhatsappRoutingQuestion(e.target.value);
+                                clearFieldError("whatsappRoutingQuestion");
+                              }}
+                              placeholder={DEFAULT_WHATSAPP_ROUTING_QUESTION}
+                              aria-invalid={Boolean(
+                                fieldErrors.whatsappRoutingQuestion,
+                              )}
+                              className={inputClass(
+                                Boolean(fieldErrors.whatsappRoutingQuestion),
+                              )}
+                            />
+                          </Field>
+
+                          <RoutingPreview
+                            question={
+                              whatsappRoutingQuestion.trim() ||
+                              DEFAULT_WHATSAPP_ROUTING_QUESTION
+                            }
+                            destinations={whatsappDestinations}
+                          />
+                        </>
+                      ) : null}
 
                       <div className="space-y-2">
                         <Field
@@ -1872,7 +1984,7 @@ export function ChatbotForm({
                       </div>
 
                       <WhatsAppPreview
-                        phone={whatsappPhoneNumber}
+                        phone={whatsappDestinations[0]?.phoneNumber ?? ""}
                         message={previewWhatsAppMessage(
                           whatsappMessageTemplate,
                           name,
@@ -2177,13 +2289,10 @@ export function ChatbotForm({
                     )}
                     <ReviewRow
                       label="WhatsApp"
-                      value={
-                        whatsappEnabled
-                          ? whatsappPhoneNumber.trim()
-                            ? whatsappPhoneNumber.trim()
-                            : "Ativado (número pendente)"
-                          : "Desativado"
-                      }
+                      value={reviewWhatsAppValue(
+                        whatsappEnabled,
+                        whatsappDestinations,
+                      )}
                     />
                     <ReviewRow
                       label="Situação"
@@ -2627,6 +2736,145 @@ function StepNumber({ children }: { children: ReactNode }) {
     <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[11px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
       {children}
     </span>
+  );
+}
+
+/** Summarizes the configured numbers for the "Revisar" step. */
+function reviewWhatsAppValue(
+  enabled: boolean,
+  destinations: WhatsAppDestination[],
+): string {
+  if (!enabled) return "Desativado";
+  const filled = destinations.filter((entry) => entry.phoneNumber.trim());
+  if (filled.length === 0) return "Ativado (número pendente)";
+  if (filled.length === 1) return filled[0].phoneNumber.trim();
+  return filled
+    .map((entry) =>
+      entry.label.trim()
+        ? `${entry.label.trim()}: ${entry.phoneNumber.trim()}`
+        : entry.phoneNumber.trim(),
+    )
+    .join(" · ");
+}
+
+/** One office: the name the visitor picks plus the number it opens. */
+function DestinationRow({
+  index,
+  destination,
+  showLabel,
+  canRemove,
+  invalid,
+  formId,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  destination: WhatsAppDestination;
+  showLabel: boolean;
+  canRemove: boolean;
+  invalid: boolean;
+  formId: string;
+  onChange: (patch: Partial<Omit<WhatsAppDestination, "id">>) => void;
+  onRemove: () => void;
+}) {
+  const phoneId = `${formId}-whatsapp-phone-${destination.id}`;
+  const labelId = `${formId}-whatsapp-label-${destination.id}`;
+
+  return (
+    <div className="rounded-xl border border-zinc-200/70 bg-white/60 p-3 dark:border-zinc-800/70 dark:bg-zinc-900/40">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          Número {index + 1}
+        </span>
+        {canRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remover número ${index + 1}`}
+            className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/45 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+          >
+            <IconX className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-2 space-y-2">
+        {showLabel ? (
+          <div className="space-y-1">
+            <label
+              htmlFor={labelId}
+              className="block text-xs font-medium text-zinc-600 dark:text-zinc-300"
+            >
+              Nome do consultório
+            </label>
+            <input
+              id={labelId}
+              value={destination.label}
+              onChange={(e) => onChange({ label: e.target.value })}
+              placeholder="Consultório de São Paulo"
+              className={inputClass(invalid && !destination.label.trim())}
+            />
+          </div>
+        ) : null}
+
+        <div className="space-y-1">
+          <label
+            htmlFor={phoneId}
+            className="block text-xs font-medium text-zinc-600 dark:text-zinc-300"
+          >
+            Número do WhatsApp
+          </label>
+          <input
+            id={phoneId}
+            type="tel"
+            autoComplete="tel"
+            value={destination.phoneNumber}
+            onChange={(e) => onChange({ phoneNumber: e.target.value })}
+            placeholder="+55 11 99999-0000"
+            className={inputClass(invalid && !destination.phoneNumber.trim())}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Shows how the routing question will look inside the chat. */
+function RoutingPreview({
+  question,
+  destinations,
+}: {
+  question: string;
+  destinations: WhatsAppDestination[];
+}) {
+  const options = destinations.filter((entry) => entry.label.trim());
+  return (
+    <div className="space-y-1.5">
+      <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
+        Como o bot pergunta no site
+      </span>
+      <div className="space-y-2 rounded-xl border border-zinc-200/70 bg-zinc-50/80 p-3 dark:border-zinc-800/70 dark:bg-zinc-950/40">
+        <p className="max-w-[85%] rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-xs leading-relaxed text-zinc-700 shadow-sm dark:bg-zinc-900 dark:text-zinc-200">
+          {question}
+        </p>
+        {options.length > 0 ? (
+          <div className="space-y-1.5">
+            {options.map((entry) => (
+              <div
+                key={entry.id}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                {entry.label.trim()}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            Dê um nome a cada consultório para ver as opções aqui.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 

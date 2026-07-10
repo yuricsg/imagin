@@ -49,6 +49,11 @@ export type LeadSubmission = {
   answers?: Record<string, string | string[]>;
   /** When "custom_dialogue", intent branching rules are relaxed. */
   flowMode?: "legacy" | "custom_dialogue";
+  /**
+   * Which of the bot's WhatsApp numbers the visitor picked. Only sent by bots
+   * with more than one destination; absent means "use the primary number".
+   */
+  whatsappDestinationId?: string;
   source: LeadSource;
 };
 

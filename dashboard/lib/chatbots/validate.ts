@@ -1,7 +1,7 @@
 import type { ChatbotInput } from "./create";
 import { FLOW_TEMPLATES, validateDialogueFlow } from "./flows";
 import { isValidGaMeasurementId, isValidMetaPixelId } from "./tracking";
-import { isValidWhatsAppPhone } from "./whatsapp";
+import { isValidWhatsAppPhone, normalizeWhatsAppPhone } from "./whatsapp";
 
 export type ChatbotField = keyof ChatbotInput;
 
@@ -59,14 +59,56 @@ export function validateChatbotInput(input: ChatbotInput): ChatbotFieldErrors | 
   }
 
   if (input.whatsappEnabled) {
-    const phone = input.whatsappPhoneNumber.trim();
-    if (!phone) {
-      errors.whatsappPhoneNumber =
+    const destinations = input.whatsappDestinations ?? [];
+    const filled = destinations.filter(
+      (entry) => entry.label.trim() || entry.phoneNumber.trim(),
+    );
+    const isMulti = filled.length > 1;
+
+    if (filled.length === 0) {
+      errors.whatsappDestinations =
         "Informe o número do WhatsApp com DDI e DDD, ex.: +55 11 99999-0000.";
-    } else if (!isValidWhatsAppPhone(phone)) {
-      errors.whatsappPhoneNumber =
-        "Use um número válido com DDI e DDD (mínimo 10 dígitos).";
     }
+
+    const seenLabels = new Set<string>();
+    const seenPhones = new Set<string>();
+    for (const [index, entry] of filled.entries()) {
+      const position = `Número ${index + 1}`;
+      const label = entry.label.trim();
+      const phone = entry.phoneNumber.trim();
+
+      if (!phone) {
+        errors.whatsappDestinations ??= `${position}: informe o número com DDI e DDD.`;
+      } else if (!isValidWhatsAppPhone(phone)) {
+        errors.whatsappDestinations ??= `${position}: use um número válido com DDI e DDD (mínimo 10 dígitos).`;
+      } else {
+        const digits = normalizeWhatsAppPhone(phone);
+        if (seenPhones.has(digits)) {
+          errors.whatsappDestinations ??= `${position}: este número já foi adicionado.`;
+        }
+        seenPhones.add(digits);
+      }
+
+      // The label is what the visitor picks in the routing question, so it is
+      // only required — and only has to be unique — once there is a choice.
+      if (isMulti) {
+        if (!label) {
+          errors.whatsappDestinations ??= `${position}: dê um nome ao consultório para o visitante escolher, ex.: "Consultório de SP".`;
+        } else {
+          const key = label.toLocaleLowerCase("pt-BR");
+          if (seenLabels.has(key)) {
+            errors.whatsappDestinations ??= `${position}: já existe um consultório chamado “${label}”.`;
+          }
+          seenLabels.add(key);
+        }
+      }
+    }
+
+    if (isMulti && !input.whatsappRoutingQuestion.trim()) {
+      errors.whatsappRoutingQuestion =
+        "Escreva a pergunta que o bot fará para escolher o consultório.";
+    }
+
     if (!input.whatsappMessageTemplate.trim()) {
       errors.whatsappMessageTemplate =
         "Escreva a mensagem que será enviada ao abrir o WhatsApp.";

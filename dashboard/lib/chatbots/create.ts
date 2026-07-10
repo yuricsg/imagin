@@ -16,7 +16,10 @@ import { buildTrackingFromInput } from "./tracking";
 import {
   buildWhatsAppFromInput,
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  DEFAULT_WHATSAPP_ROUTING_QUESTION,
   EMPTY_WHATSAPP,
+  normalizeWhatsAppDestinations,
+  type WhatsAppDestination,
 } from "./whatsapp";
 import {
   buildLauncherFromInput,
@@ -167,18 +170,33 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
           ? (record.whatsapp as Record<string, unknown>)
           : null;
       const enabled = whatsappRaw?.enabled === true;
-      const phoneNumber =
-        typeof whatsappRaw?.phoneNumber === "string"
-          ? whatsappRaw.phoneNumber
-          : "";
       const messageTemplate =
         typeof whatsappRaw?.messageTemplate === "string" &&
         whatsappRaw.messageTemplate.trim()
           ? whatsappRaw.messageTemplate
           : DEFAULT_WHATSAPP_MESSAGE_TEMPLATE;
-      return enabled
-        ? { enabled: true, phoneNumber, messageTemplate }
-        : { ...EMPTY_WHATSAPP, messageTemplate };
+      const routingQuestion =
+        typeof whatsappRaw?.routingQuestion === "string" &&
+        whatsappRaw.routingQuestion.trim()
+          ? whatsappRaw.routingQuestion.trim()
+          : DEFAULT_WHATSAPP_ROUTING_QUESTION;
+      if (!enabled) {
+        return { ...EMPTY_WHATSAPP, routingQuestion, messageTemplate };
+      }
+      // Bots saved before multi-number support only carry `phoneNumber`.
+      const destinations = normalizeWhatsAppDestinations(
+        whatsappRaw?.destinations,
+        typeof whatsappRaw?.phoneNumber === "string"
+          ? whatsappRaw.phoneNumber
+          : "",
+      );
+      return {
+        enabled: true,
+        phoneNumber: destinations[0]?.phoneNumber ?? "",
+        destinations,
+        routingQuestion,
+        messageTemplate,
+      };
     })(),
     embed: {
       apiBaseUrl:
@@ -224,7 +242,10 @@ export type ChatbotInput = {
   gaMeasurementId: string;
   metaPixelId: string;
   whatsappEnabled: boolean;
-  whatsappPhoneNumber: string;
+  /** One number per office; two or more make the bot ask which one to use. */
+  whatsappDestinations: WhatsAppDestination[];
+  /** Question asked before the handoff when there is more than one number. */
+  whatsappRoutingQuestion: string;
   whatsappMessageTemplate: string;
   /** One teaser line per entry; empty entries are dropped on save. */
   launcherTeaserTexts: string[];
@@ -320,7 +341,10 @@ export function chatbotToInput(bot: Chatbot): ChatbotInput {
     gaMeasurementId: safe.tracking.gaMeasurementId ?? "",
     metaPixelId: safe.tracking.metaPixelId ?? "",
     whatsappEnabled: safe.whatsapp.enabled,
-    whatsappPhoneNumber: safe.whatsapp.phoneNumber,
+    whatsappDestinations: safe.whatsapp.destinations.map((entry) => ({
+      ...entry,
+    })),
+    whatsappRoutingQuestion: safe.whatsapp.routingQuestion,
     whatsappMessageTemplate: safe.whatsapp.messageTemplate,
     launcherTeaserTexts: [...(safe.launcher ?? DEFAULT_LAUNCHER).teaserTexts],
     launcherAvatarUrl: (safe.launcher ?? DEFAULT_LAUNCHER).avatarUrl,

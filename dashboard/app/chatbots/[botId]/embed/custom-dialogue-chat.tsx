@@ -12,6 +12,11 @@ import {
   type DialogueFlow,
   type FlowStep,
 } from "@/lib/chatbots/flows";
+import {
+  DEFAULT_WHATSAPP_ROUTING_QUESTION,
+  needsWhatsAppRouting,
+  type WhatsAppDestination,
+} from "@/lib/chatbots/whatsapp";
 
 type LeadSource = {
   pageUrl?: string;
@@ -35,7 +40,7 @@ type ChatMessage = {
   text: string;
 };
 
-type DialogueUiStep = "idle" | "step" | "complete";
+type DialogueUiStep = "idle" | "step" | "routing" | "complete";
 
 const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -66,6 +71,9 @@ export function CustomDialogueChat({
   const [textValue, setTextValue] = useState("");
   const [multiSelected, setMultiSelected] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [destination, setDestination] = useState<WhatsAppDestination | null>(
+    null,
+  );
   const [leadResponse, setLeadResponse] = useState<LeadResponse | null>(null);
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,6 +88,15 @@ export function CustomDialogueChat({
     () => getDialogueStep(dialogue, currentStepId),
     [dialogue, currentStepId],
   );
+
+  const whatsappDestinations = useMemo(
+    () => bot.whatsapp.destinations ?? [],
+    [bot.whatsapp.destinations],
+  );
+  // With a single office there is nothing to ask — keep the old flow verbatim.
+  const asksForDestination = needsWhatsAppRouting(bot.whatsapp);
+  const routingQuestion =
+    bot.whatsapp.routingQuestion?.trim() || DEFAULT_WHATSAPP_ROUTING_QUESTION;
 
   const clearScheduled = useCallback(() => {
     timersRef.current.forEach((t) => window.clearTimeout(t));
@@ -183,12 +200,17 @@ export function CustomDialogueChat({
 
   async function finishFlow(
     nextAnswers: Record<string, string | string[]>,
+    chosen: WhatsAppDestination | null,
   ) {
     setIsSubmitting(true);
     setError("");
     setUiStep("idle");
     const fields = extractLeadFieldsFromAnswers(dialogue, nextAnswers);
     const name = fields.name || "Visitante";
+    // Feeds the {unidade} placeholder in the WhatsApp message template.
+    const customFields = chosen?.label
+      ? { ...fields.custom, unidade: chosen.label }
+      : fields.custom;
     try {
       const response = await fetch(
         `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
@@ -201,12 +223,13 @@ export function CustomDialogueChat({
             phone: fields.phone || undefined,
             email: fields.email || undefined,
             message: fields.message || undefined,
-            customFields: Object.keys(fields.custom).length
-              ? fields.custom
+            customFields: Object.keys(customFields).length
+              ? customFields
               : undefined,
             intent: "schedule_consultation",
             answers: nextAnswers,
             flowMode: "custom_dialogue",
+            whatsappDestinationId: chosen?.id,
             source,
           }),
         },
@@ -214,20 +237,28 @@ export function CustomDialogueChat({
       if (!response.ok) throw new Error(`API respondeu ${response.status}`);
       setLeadResponse((await response.json()) as LeadResponse);
       setIsSubmitting(false);
-      const closing =
-        bot.flow.tone === "formal"
-          ? [
-              "Obrigado. Suas informações foram registradas. 🙏",
-              bot.whatsapp.enabled
-                ? "Continue o atendimento pelo WhatsApp para confirmar os detalhes."
-                : "Nossa equipe entrará em contato em breve.",
-            ]
-          : [
-              "Prontinho! Já recebemos seus dados. 🙏",
-              bot.whatsapp.enabled
-                ? "Continue no WhatsApp para falar com nossa equipe."
-                : "Nossa equipe entrará em contato em breve para dar sequência.",
-            ];
+      const isFormalTone = bot.flow.tone === "formal";
+      const office = chosen?.label;
+      const handoff = isFormalTone
+        ? office
+          ? `Continue o atendimento pelo WhatsApp do ${office} para confirmar os detalhes.`
+          : "Continue o atendimento pelo WhatsApp para confirmar os detalhes."
+        : office
+          ? `Continue no WhatsApp para falar com a equipe do ${office}.`
+          : "Continue no WhatsApp para falar com nossa equipe.";
+      const closing = isFormalTone
+        ? [
+            "Obrigado. Suas informações foram registradas. 🙏",
+            bot.whatsapp.enabled
+              ? handoff
+              : "Nossa equipe entrará em contato em breve.",
+          ]
+        : [
+            "Prontinho! Já recebemos seus dados. 🙏",
+            bot.whatsapp.enabled
+              ? handoff
+              : "Nossa equipe entrará em contato em breve para dar sequência.",
+          ];
       await playBotMessages(closing, () => setUiStep("complete"));
     } catch (caught) {
       setError(
@@ -235,9 +266,30 @@ export function CustomDialogueChat({
           ? caught.message
           : "Não foi possível registrar o lead.",
       );
-      setUiStep("step");
+      // Send the visitor back to whichever question they last answered.
+      setUiStep(chosen ? "routing" : "step");
       setIsSubmitting(false);
     }
+  }
+
+  /** Last question of the run: which office should receive this visitor? */
+  function askForDestination() {
+    void playBotMessages([routingQuestion], () => setUiStep("routing"));
+  }
+
+  function endDialogue(nextAnswers: Record<string, string | string[]>) {
+    if (asksForDestination) {
+      setAnswers(nextAnswers);
+      askForDestination();
+      return;
+    }
+    void finishFlow(nextAnswers, whatsappDestinations[0] ?? null);
+  }
+
+  function selectDestination(chosen: WhatsAppDestination) {
+    addMessage("user", chosen.label);
+    setDestination(chosen);
+    void finishFlow(answers, chosen);
   }
 
   function advance(step: FlowStep, answer: string | string[], display: string) {
@@ -248,13 +300,9 @@ export function CustomDialogueChat({
     setMultiSelected([]);
 
     const nextId = resolveNextStepId(dialogue, step.id, answer);
-    if (!nextId) {
-      void finishFlow(nextAnswers);
-      return;
-    }
-    const nextStep = getDialogueStep(dialogue, nextId);
-    if (!nextStep) {
-      void finishFlow(nextAnswers);
+    const nextStep = nextId ? getDialogueStep(dialogue, nextId) : null;
+    if (!nextId || !nextStep) {
+      endDialogue(nextAnswers);
       return;
     }
     setCurrentStepId(nextId);
@@ -404,6 +452,21 @@ export function CustomDialogueChat({
           </div>
         )}
 
+        {uiStep === "routing" && !isSubmitting && (
+          <div className="space-y-2">
+            {whatsappDestinations.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => selectDestination(entry)}
+                className="block w-full rounded-xl border border-[#d0d7e5] bg-white px-3 py-2.5 text-left text-sm font-medium transition hover:border-[#205ea8] hover:bg-[#f0f4fb] hover:text-[#205ea8]"
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {isSubmitting && (
           <p className="text-center text-xs text-[#8792a5]">
             Registrando atendimento...
@@ -425,7 +488,9 @@ export function CustomDialogueChat({
                 rel="noreferrer"
                 className="flex items-center justify-center gap-2 rounded-xl bg-[#25d366] py-3 text-sm font-semibold text-white transition hover:bg-[#1ebe5a]"
               >
-                Continuar no WhatsApp
+                {destination?.label
+                  ? `Continuar no WhatsApp — ${destination.label}`
+                  : "Continuar no WhatsApp"}
               </a>
             ) : null}
             {leadResponse.whatsappMessage ? (
