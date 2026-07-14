@@ -173,6 +173,24 @@ describe("seedDialogueFromTemplate / navigation", () => {
     const issues = validateDialogueFlow(dialogue);
     expect(issues.some((i) => i.message.includes("pelo menos 2"))).toBe(true);
   });
+
+  it("requires a real lead name mapping", () => {
+    const dialogue = seedDialogueFromTemplate("patient-capture", {
+      insuranceMode: "particular",
+      collectFields: ["name"],
+    });
+    for (const step of dialogue.steps) {
+      if (step.mapsTo === "name" || step.saveAs === "name") {
+        step.mapsTo = undefined;
+        step.saveAs = undefined;
+      }
+    }
+    expect(
+      validateDialogueFlow(dialogue).some((issue) =>
+        issue.message.includes("Nome do lead"),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("applyToneToDialogue", () => {

@@ -1,6 +1,10 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CreateLeadRecordInput, LeadRecord } from "./types.js";
 import type { LeadRepository } from "./lead-repository.js";
+import {
+  deriveSubmittedLeadStatus,
+  normalizePersistedLeadStatus,
+} from "./lead-status.js";
 
 export class PrismaLeadRepository implements LeadRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -11,6 +15,11 @@ export class PrismaLeadRepository implements LeadRepository {
     });
 
     return rows.map(toLeadRecord);
+  }
+
+  async findById(id: string): Promise<LeadRecord | null> {
+    const row = await this.prisma.lead.findUnique({ where: { id } });
+    return row ? toLeadRecord(row) : null;
   }
 
   async create(input: CreateLeadRecordInput): Promise<LeadRecord> {
@@ -24,7 +33,19 @@ export class PrismaLeadRepository implements LeadRepository {
         medicalRequestStatus: input.medicalRequestStatus ?? null,
         consultationNeed: input.consultationNeed ?? null,
         consultationDecision: input.consultationDecision ?? null,
-        status: "new",
+        phone: input.phone ?? null,
+        email: input.email ?? null,
+        message: input.message ?? null,
+        ...(input.customFields
+          ? { customFields: input.customFields as Prisma.InputJsonValue }
+          : {}),
+        ...(input.answers
+          ? { answers: input.answers as Prisma.InputJsonValue }
+          : {}),
+        flowMode: input.flowMode ?? "legacy",
+        whatsappDestinationId: input.whatsappDestinationId ?? null,
+        sessionId: input.sessionId ?? null,
+        status: deriveSubmittedLeadStatus(input),
         whatsappMessage: input.whatsappMessage,
         whatsappUrl: input.whatsappUrl,
         pageUrl: input.source.pageUrl ?? null,
@@ -47,6 +68,19 @@ export class PrismaLeadRepository implements LeadRepository {
 
     return toLeadRecord(row);
   }
+
+  async updateStatus(
+    id: string,
+    status: LeadRecord["status"],
+  ): Promise<LeadRecord | null> {
+    const existing = await this.prisma.lead.findUnique({ where: { id } });
+    if (!existing) return null;
+    const row = await this.prisma.lead.update({
+      where: { id },
+      data: { status },
+    });
+    return toLeadRecord(row);
+  }
 }
 
 function toLeadRecord(row: Awaited<ReturnType<PrismaClient["lead"]["create"]>>): LeadRecord {
@@ -54,13 +88,21 @@ function toLeadRecord(row: Awaited<ReturnType<PrismaClient["lead"]["create"]>>):
     id: row.id,
     botId: row.botId,
     clientId: row.clientId,
+    sessionId: row.sessionId ?? undefined,
     name: row.name,
     intent: row.intent as LeadRecord["intent"],
     selectedExams: row.selectedExams,
     medicalRequestStatus: row.medicalRequestStatus ?? undefined,
     consultationNeed: row.consultationNeed ?? undefined,
     consultationDecision: row.consultationDecision ?? undefined,
-    status: row.status as LeadRecord["status"],
+    phone: row.phone ?? undefined,
+    email: row.email ?? undefined,
+    message: row.message ?? undefined,
+    customFields: readStringRecord(row.customFields),
+    answers: readAnswers(row.answers),
+    flowMode: row.flowMode === "custom_dialogue" ? "custom_dialogue" : "legacy",
+    whatsappDestinationId: row.whatsappDestinationId ?? undefined,
+    status: normalizePersistedLeadStatus(row.status),
     whatsappMessage: row.whatsappMessage,
     whatsappUrl: row.whatsappUrl,
     source: {
@@ -89,4 +131,25 @@ function toLeadRecord(row: Awaited<ReturnType<PrismaClient["lead"]["create"]>>):
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function readStringRecord(value: Prisma.JsonValue | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") result[key] = entry;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function readAnswers(value: Prisma.JsonValue | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const result: Record<string, string | string[]> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") result[key] = entry;
+    if (Array.isArray(entry) && entry.every((item) => typeof item === "string")) {
+      result[key] = entry;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }

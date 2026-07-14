@@ -11,14 +11,44 @@ export function LeadsTable({
   botsById,
   showBotColumn,
   nowMs,
+  onOpenLead,
 }: {
   leads: Lead[];
   botsById: Record<string, Chatbot>;
   showBotColumn: boolean;
   nowMs: number;
+  onOpenLead: (lead: Lead) => void;
 }) {
   return (
-    <div className="overflow-x-auto">
+    <>
+      <div className="divide-y divide-zinc-100 md:hidden dark:divide-zinc-800/70">
+        {leads.map((lead) => {
+          const bot = botsById[lead.botId];
+          const status = LEAD_STATUS[lead.status];
+          return (
+            <button
+              key={lead.id}
+              type="button"
+              onClick={() => onOpenLead(lead)}
+              className="block w-full px-4 py-4 text-left transition-colors hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none dark:hover:bg-zinc-800/30 dark:focus:bg-zinc-800/30"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{lead.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{bot?.name ?? lead.botId}</p>
+                </div>
+                <span className="shrink-0 text-xs tabular-nums text-zinc-400">{relativeTime(lead.createdAt, nowMs)}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Badge label={status.label} className={status.badge} dot={status.dot} />
+                <Badge label={LEAD_CHANNEL[lead.attribution.channel].label} className={LEAD_CHANNEL[lead.attribution.channel].badge} />
+              </div>
+              <p className="mt-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-300">{lead.classification.primary}</p>
+            </button>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[680px] border-collapse">
         <thead>
           <tr className="border-b border-zinc-200 dark:border-zinc-800">
@@ -47,12 +77,14 @@ export function LeadsTable({
                       className="bg-linear-to-br from-zinc-100 to-zinc-200 text-zinc-600 dark:from-zinc-700 dark:to-zinc-800 dark:text-zinc-200"
                     />
                     <div className="min-w-0">
-                      <p
+                      <button
+                        type="button"
+                        onClick={() => onOpenLead(lead)}
                         className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
                         title={lead.message}
                       >
                         {lead.name}
-                      </p>
+                      </button>
                       <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
                         {lead.email}
                       </p>
@@ -100,7 +132,8 @@ export function LeadsTable({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 

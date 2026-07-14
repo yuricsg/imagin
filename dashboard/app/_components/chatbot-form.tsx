@@ -30,7 +30,6 @@ import {
   type DialogueFlow,
   type FlowFieldKey,
   type FlowInputType,
-  type FlowMapsTo,
   type FlowShape,
   type FlowStep,
   type FlowStepOption,
@@ -507,13 +506,16 @@ export function ChatbotForm({
       steps: prev.steps.map((s) => {
         if (s.id !== stepId) return s;
         if (!value) {
-          const { saveAs: _s, mapsTo: _m, ...rest } = s;
+          const rest = { ...s };
+          delete rest.saveAs;
+          delete rest.mapsTo;
           return rest;
         }
         if (isBuiltinSaveAs(value)) {
           return { ...s, saveAs: value, mapsTo: value };
         }
-        const { mapsTo: _m, ...rest } = s;
+        const rest = { ...s };
+        delete rest.mapsTo;
         return { ...rest, saveAs: value };
       }),
     }));

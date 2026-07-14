@@ -120,6 +120,25 @@ export function IconX(props: IconProps) {
   );
 }
 
+export function IconDownload(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </Icon>
+  );
+}
+
+export function IconCalendar(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 10h18" />
+    </Icon>
+  );
+}
+
 export function IconArrowLeft(props: IconProps) {
   return (
     <Icon {...props}>

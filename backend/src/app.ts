@@ -1,15 +1,26 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { timingSafeEqual } from "node:crypto";
 import { toPublicChatbotConfig } from "./chatbots/catalog.js";
 import { getConversationFlow } from "./chatbots/conversation-flows.js";
 import { PrismaChatbotRepository } from "./chatbots/prisma-chatbot-repository.js";
 import { PrismaLeadRepository } from "./leads/prisma-lead-repository.js";
+import { MemoryConversationRepository } from "./conversations/memory-conversation-repository.js";
+import { PrismaConversationRepository } from "./conversations/prisma-conversation-repository.js";
+import { deriveAutomaticLeadStatus } from "./conversations/session-state.js";
+import {
+  CHAT_EVENT_TYPES,
+  type ChatEventInput,
+  type ConversationRepository,
+} from "./conversations/types.js";
 import { getPrisma } from "./db.js";
 import {
   buildLeadRecordInput,
   leadToDto,
+  readLeadSource,
   validateLeadSubmission,
 } from "./leads/validation.js";
+import { leadToDashboardDto } from "./leads/dashboard-dto.js";
 import { createTrackingService } from "./tracking/tracking-service.js";
 import type { ChatbotRepository } from "./chatbots/file-chatbot-repository.js";
 import type { CreateChatbotInput } from "./chatbots/types.js";
@@ -20,7 +31,9 @@ export type AppOptions = {
   chatbotRepository?: ChatbotRepository;
   leadRepository?: LeadRepository;
   trackingService?: TrackingService;
+  conversationRepository?: ConversationRepository;
   corsOrigins?: string[];
+  conversionWebhookSecret?: string;
 };
 
 const defaultCorsOrigins = [
@@ -38,6 +51,11 @@ export function createApp(options: AppOptions = {}) {
     options.chatbotRepository ?? new PrismaChatbotRepository(prisma!);
   const leadRepository =
     options.leadRepository ?? new PrismaLeadRepository(prisma!);
+  const conversationRepository =
+    options.conversationRepository ??
+    (prisma
+      ? new PrismaConversationRepository(prisma)
+      : new MemoryConversationRepository());
   const corsOrigins = options.corsOrigins ?? readCorsOrigins();
   const trackingService = options.trackingService ?? createTrackingService();
   const app = new Hono();
@@ -52,7 +70,7 @@ export function createApp(options: AppOptions = {}) {
 
         return corsOrigins[0] || "*";
       },
-      allowHeaders: ["Content-Type"],
+      allowHeaders: ["Content-Type", "Authorization"],
       allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       maxAge: 600,
     }),
@@ -77,6 +95,55 @@ export function createApp(options: AppOptions = {}) {
     }
 
     return c.json({ chatbot: toPublicChatbotConfig(chatbot) });
+  });
+
+  app.post("/api/public/chatbots/:botId/sessions", async (c) => {
+    const botId = c.req.param("botId");
+    const chatbot = await chatbotRepository.get(botId);
+    if (!chatbot) return c.json({ error: "Chatbot not found" }, 404);
+
+    const rawBody = await safeReadJson(c.req.raw);
+    if (!isRecord(rawBody)) return c.json({ error: "Invalid body" }, 400);
+    const clientId = readOptionalString(rawBody.clientId);
+    if (!clientId) return c.json({ error: "clientId is required" }, 400);
+
+    const session = await conversationRepository.createSession({
+      botId,
+      clientId,
+      source: readLeadSource(rawBody.source),
+    });
+    return c.json(
+      {
+        session: {
+          id: session.id,
+          botId: session.botId,
+          clientId: session.clientId,
+          openedAt: session.openedAt,
+          status: deriveAutomaticLeadStatus(session),
+        },
+      },
+      201,
+    );
+  });
+
+  app.post("/api/public/chatbots/:botId/sessions/:sessionId/events", async (c) => {
+    const session = await conversationRepository.getSession(c.req.param("sessionId"));
+    if (!session || session.botId !== c.req.param("botId")) {
+      return c.json({ error: "Chat session not found" }, 404);
+    }
+
+    const eventResult = readPublicChatEvent(await safeReadJson(c.req.raw));
+    if (!eventResult.ok) {
+      return c.json({ error: "Invalid chat event", issues: eventResult.issues }, 400);
+    }
+
+    const updated = await conversationRepository.appendEvent(session.id, eventResult.value);
+    if (!updated) return c.json({ error: "Chat session not found" }, 404);
+    const status = deriveAutomaticLeadStatus(updated);
+    if (updated.leadId) {
+      await leadRepository.updateStatus(updated.leadId, status);
+    }
+    return c.json({ session: { id: updated.id, status, updatedAt: updated.updatedAt } });
   });
 
   app.get("/api/chatbots", async (c) => {
@@ -170,9 +237,40 @@ export function createApp(options: AppOptions = {}) {
       return c.json({ error: "Invalid lead submission", issues: result.issues }, 400);
     }
 
-    const lead = await leadRepository.create(
+    const session = result.value.sessionId
+      ? await conversationRepository.getSession(result.value.sessionId)
+      : null;
+    if (
+      result.value.sessionId &&
+      (!session || session.botId !== chatbot.botId || session.clientId !== result.value.clientId)
+    ) {
+      return c.json({ error: "Invalid chat session" }, 400);
+    }
+    if (session?.leadId) {
+      const existing = await leadRepository.findById(session.leadId);
+      if (existing) {
+        return c.json({
+          lead: leadToDto(existing),
+          whatsappMessage: existing.whatsappMessage,
+          whatsappUrl: existing.whatsappUrl,
+          tracking: [],
+        });
+      }
+    }
+
+    let lead = await leadRepository.create(
       buildLeadRecordInput(result.value, chatbot),
     );
+    if (session) {
+      const updatedSession = await conversationRepository.appendEvent(session.id, {
+        type: "lead_created",
+        leadId: lead.id,
+      });
+      if (updatedSession) {
+        const status = deriveAutomaticLeadStatus(updatedSession);
+        lead = (await leadRepository.updateStatus(lead.id, status)) ?? lead;
+      }
+    }
     const tracking = await trackingService.trackLeadCreated(lead, chatbot, {
       ipAddress: getRequestIp(c.req.raw),
       userAgent: c.req.header("user-agent") ?? undefined,
@@ -192,15 +290,64 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/leads", async (c) => {
     const botId = c.req.query("botId");
     const clientId = c.req.query("clientId");
-    const leads = await leadRepository.list();
+    const [leads, sessions] = await Promise.all([
+      leadRepository.list(),
+      conversationRepository.listSessions(),
+    ]);
+    const leadsById = new Map(leads.map((lead) => [lead.id, lead]));
+    const sessionLeadIds = new Set<string>();
+    const dashboardLeads = sessions
+      .filter((session) => Boolean(session.visitorName?.trim()))
+      .map((session) => {
+        const lead = session.leadId ? leadsById.get(session.leadId) : undefined;
+        if (lead) sessionLeadIds.add(lead.id);
+        return leadToDashboardDto(lead, session);
+      });
+    for (const lead of leads) {
+      if (!sessionLeadIds.has(lead.id)) {
+        dashboardLeads.push(leadToDashboardDto(lead));
+      }
+    }
 
     return c.json({
-      leads: leads
+      leads: dashboardLeads
         .filter((lead) => !botId || lead.botId === botId)
         .filter((lead) => !clientId || lead.clientId === clientId)
-        .map(leadToDto)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+      accesses: sessions
+        .filter((session) => !botId || session.botId === botId)
+        .filter((session) => !clientId || session.clientId === clientId)
+        .map((session) => ({
+          id: session.id,
+          botId: session.botId,
+          clientId: session.clientId,
+          openedAt: session.openedAt,
+        })),
     });
+  });
+
+  app.post("/api/integrations/leads/:leadId/converted", async (c) => {
+    const secret =
+      options.conversionWebhookSecret ?? process.env.CONVERSION_WEBHOOK_SECRET;
+    if (!secret) {
+      return c.json({ error: "Conversion webhook is not configured" }, 503);
+    }
+    if (!matchesBearerToken(c.req.header("authorization"), secret)) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const lead = await leadRepository.updateStatus(
+      c.req.param("leadId"),
+      "converted",
+    );
+    if (!lead) return c.json({ error: "Lead not found" }, 404);
+    const session = await conversationRepository.findByLeadId(lead.id);
+    if (session) {
+      await conversationRepository.appendEvent(session.id, {
+        type: "conversion_confirmed",
+      });
+    }
+    return c.json({ lead: leadToDto(lead), status: "converted" });
   });
 
   return app;
@@ -370,6 +517,77 @@ function readStringList(value: unknown) {
 
 function readStatus(value: unknown): CreateChatbotInput["status"] {
   return value === "draft" || value === "archived" ? value : "active";
+}
+
+type PublicChatEventResult =
+  | { ok: true; value: ChatEventInput }
+  | { ok: false; issues: string[] };
+
+const PUBLIC_CHAT_EVENT_TYPES = new Set([
+  "name_captured",
+  "intent_selected",
+  "answer_submitted",
+  "flow_completed",
+  "whatsapp_clicked",
+]);
+
+function readPublicChatEvent(value: unknown): PublicChatEventResult {
+  if (!isRecord(value)) return { ok: false, issues: ["body must be a JSON object"] };
+  const type = readOptionalString(value.type);
+  if (!CHAT_EVENT_TYPES.has(type as ChatEventInput["type"]) || !PUBLIC_CHAT_EVENT_TYPES.has(type)) {
+    return { ok: false, issues: ["event type is not allowed"] };
+  }
+
+  const event: ChatEventInput = { type: type as ChatEventInput["type"] };
+  const stepId = readOptionalString(value.stepId);
+  const label = readOptionalString(value.label);
+  const name = readOptionalString(value.name);
+  const intent = readLeadIntent(value.intent);
+  const eventValue = readChatEventValue(value.value);
+  if (stepId) event.stepId = stepId;
+  if (label) event.label = label;
+  if (name) event.name = name;
+  if (intent) event.intent = intent;
+  if (eventValue !== undefined) event.value = eventValue;
+  if (value.flowMode === "custom_dialogue") event.flowMode = "custom_dialogue";
+  if (event.type === "name_captured" && !event.name) {
+    return { ok: false, issues: ["name is required"] };
+  }
+  if (event.type === "intent_selected" && !event.intent) {
+    return { ok: false, issues: ["intent is required"] };
+  }
+  return { ok: true, value: event };
+}
+
+function readLeadIntent(value: unknown) {
+  return value === "schedule_exam" ||
+    value === "schedule_consultation" ||
+    value === "severe_symptoms"
+    ? value
+    : undefined;
+}
+
+function readChatEventValue(value: unknown): ChatEventInput["value"] {
+  if (typeof value === "string") return value.trim().slice(0, 2_000);
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim().slice(0, 500))
+      .filter(Boolean)
+      .slice(0, 50);
+  }
+  return undefined;
+}
+
+function matchesBearerToken(authorization: string | undefined, expected: string) {
+  if (!authorization?.startsWith("Bearer ")) return false;
+  const actual = authorization.slice(7);
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return (
+    actualBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(actualBuffer, expectedBuffer)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

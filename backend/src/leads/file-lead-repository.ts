@@ -6,6 +6,7 @@ import type {
   LeadRecord,
 } from "./types.js";
 import type { LeadRepository } from "./lead-repository.js";
+import { deriveSubmittedLeadStatus } from "./lead-status.js";
 
 export class FileLeadRepository implements LeadRepository {
   constructor(private readonly filePath: string) {}
@@ -30,7 +31,7 @@ export class FileLeadRepository implements LeadRepository {
     const lead: LeadRecord = {
       ...input,
       id: randomUUID(),
-      status: "new",
+      status: deriveSubmittedLeadStatus(input),
       createdAt: now,
       updatedAt: now,
     };
@@ -41,6 +42,27 @@ export class FileLeadRepository implements LeadRepository {
     await writeFile(this.filePath, `${JSON.stringify(leads, null, 2)}\n`, "utf8");
 
     return lead;
+  }
+
+  async findById(id: string): Promise<LeadRecord | null> {
+    return (await this.list()).find((lead) => lead.id === id) ?? null;
+  }
+
+  async updateStatus(
+    id: string,
+    status: LeadRecord["status"],
+  ): Promise<LeadRecord | null> {
+    const leads = await this.list();
+    const index = leads.findIndex((lead) => lead.id === id);
+    if (index < 0) return null;
+    const updated: LeadRecord = {
+      ...leads[index],
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    leads[index] = updated;
+    await writeFile(this.filePath, `${JSON.stringify(leads, null, 2)}\n`, "utf8");
+    return updated;
   }
 }
 

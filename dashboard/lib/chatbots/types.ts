@@ -76,10 +76,11 @@ export type AccentKey = "indigo" | "emerald" | "amber" | "sky" | "rose" | "viole
 
 export type LeadStatus =
   | "new"
-  | "contacted"
-  | "qualified"
-  | "converted"
-  | "lost";
+  | "whatsapp_handoff"
+  | "appointment_requested"
+  | "not_interested"
+  | "abandoned"
+  | "converted";
 
 /** Where the lead came from — resolved via GA / Meta / UTM on the client site. */
 export type LeadChannel =
@@ -97,6 +98,35 @@ export interface LeadAttribution {
   utmCampaign: string | null;
 }
 
+export interface LeadSourceDetails {
+  pageUrl?: string;
+  landingPageUrl?: string;
+  referrer?: string;
+  parentOrigin?: string;
+  utm?: Record<string, string>;
+  clickIds?: Record<string, string>;
+  cookies?: Record<string, string>;
+}
+
+export interface LeadEvent {
+  id: string;
+  type: string;
+  stepId?: string;
+  label?: string;
+  value?: string | string[] | Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface LeadProgress {
+  currentStep: string | null;
+  openedAt: string | null;
+  lastActivityAt: string | null;
+  completedAt: string | null;
+  whatsappClickedAt: string | null;
+  appointmentRequestedAt: string | null;
+  convertedAt: string | null;
+}
+
 export interface Lead {
   id: string;
   botId: string;
@@ -105,13 +135,39 @@ export interface Lead {
   email: string;
   phone: string;
   status: LeadStatus;
+  leadId: string | null;
+  sessionId: string | null;
+  intent: string | null;
+  selectedExams: string[];
+  medicalRequestStatus: string | null;
+  consultationNeed: string | null;
+  consultationDecision: string | null;
+  customFields: Record<string, string> | null;
+  answers: Record<string, string | string[]> | null;
+  whatsappMessage: string | null;
+  whatsappUrl: string | null;
   /** First message / intent captured by the bot. */
   message: string;
   /** Page the widget was embedded on when the lead came in. */
   sourceUrl: string;
   /** Marketing attribution captured by the widget (GA / Meta / UTM). */
   attribution: LeadAttribution;
+  source: LeadSourceDetails;
+  classification: {
+    primary: string;
+    details: Array<{ label: string; value: string }>;
+  };
+  progress: LeadProgress;
+  events: LeadEvent[];
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatAccess {
+  id: string;
+  botId: string;
+  clientId: string;
+  openedAt: string;
 }
 
 export interface Client {
@@ -120,13 +176,10 @@ export interface Client {
 }
 
 export interface DashboardMetrics {
-  activeBots: number;
-  totalBots: number;
+  totalAccesses: number;
   totalLeads: number;
-  leadsToday: number;
-  leads7d: number;
+  appointmentRequests: number;
+  convertedLeads: number;
   /** Share of all leads that reached "converted" (0..1). */
   conversionRate: number;
-  /** Leads still in the "new" status — the operator's inbox. */
-  newLeads: number;
 }

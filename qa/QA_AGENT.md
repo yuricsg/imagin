@@ -17,7 +17,13 @@ Um build so deve ser considerado pronto quando:
 - O fluxo escolhido limita as opcoes visiveis no chatbot.
 - A API rejeita leads com intent desabilitada pelo fluxo do bot.
 - Leads criados preservam `botId`, `clientId`, campos estruturados e origem (`utm`, click IDs, cookies quando enviados).
+- Abrir o chatbot cria um acesso; apenas informar o nome cria um candidato a lead.
+- Sessoes anonimas nunca aparecem na tabela de leads.
+- Status sao derivados dos eventos reais do fluxo e abandono ocorre apos 30 minutos sem atividade.
+- A API de leads nunca substitui falhas por registros ficticios.
 - O dashboard lista leads por todos os bots e permite filtrar por bot.
+- O calendario filtra metricas, tabela e CSV pelo mesmo intervalo inclusivo.
+- O modal do lead exibe origem, respostas, ultima etapa e timeline de eventos.
 - Campos de integracao explicam onde encontrar cada chave e deixam claro que segredos ficam no backend.
 - Alteracoes de banco possuem migration e teste contra banco real antes de release.
 
@@ -29,6 +35,17 @@ Rodada local obrigatoria:
 cd backend && npm run test && npm run build
 cd ../dashboard && npm run lint && npm run build
 ```
+
+Validacao do caminho critico contra o PostgreSQL real, executada somente com a
+migration aplicada e uma `DATABASE_URL` autorizada:
+
+```bash
+cd backend && npm run qa:live-db
+```
+
+O comando cria uma sessao e um lead com `clientId` iniciado por `qa-live-`,
+confere acesso, timeline, status automatico e conversao autenticada, e remove
+todos os registros de QA ao final mesmo quando uma assercao falha.
 
 Smoke read-only contra producao:
 
@@ -54,6 +71,8 @@ QA_ALLOW_WRITES=true node qa/qa-agent.mjs \
 - Fluxo de exames: multi-select de exames, solicitacao medica, lead salvo.
 - Fluxo de consulta: necessidade, decisao, lead salvo.
 - Fluxo urgente: sintomas graves, lead salvo sem perguntas adicionais.
+- Funil: abertura, nome, intencao, respostas, conclusao e clique no WhatsApp persistidos em ordem.
+- Status: novo, encaminhado ao WhatsApp, agendamento solicitado, sem interesse, abandonado e convertido.
 - Criacao de chatbot: fluxo selecionado, listas salvas, chaves Meta/GA4 salvas server-side e ocultas na config publica.
 - Atribuicao: `utm_source`, `utm_medium`, `utm_campaign`, `fbclid`, `gclid`, `_fbp`, `_fbc` e `_ga` chegam ao lead quando presentes.
 

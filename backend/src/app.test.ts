@@ -213,6 +213,132 @@ test("passes created leads to tracking service with request context", async () =
   }
 });
 
+test("tracks access and only exposes a session as a lead after name capture", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-sessions-"));
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+    });
+    const openedResponse = await app.request(
+      "/api/public/chatbots/dra-renata-reis/sessions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: "clinica-renata",
+          source: { pageUrl: "https://cliente.example/cardio" },
+        }),
+      },
+    );
+    const opened = await openedResponse.json();
+    assert.equal(openedResponse.status, 201);
+
+    const beforeName = await (await app.request("/api/leads")).json();
+    assert.equal(beforeName.accesses.length, 1);
+    assert.equal(beforeName.leads.length, 0);
+
+    await app.request(
+      `/api/public/chatbots/dra-renata-reis/sessions/${opened.session.id}/events`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "name_captured",
+          stepId: "name",
+          name: "Guilherme",
+        }),
+      },
+    );
+    const afterName = await (await app.request("/api/leads")).json();
+    assert.equal(afterName.leads.length, 1);
+    assert.equal(afterName.leads[0].name, "Guilherme");
+    assert.equal(afterName.leads[0].status, "new");
+    assert.equal(afterName.leads[0].source.pageUrl, "https://cliente.example/cardio");
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("links a completed lead to its session and updates automatic statuses", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-funnel-"));
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+      conversionWebhookSecret: "test-secret",
+    });
+    const opened = await (
+      await app.request("/api/public/chatbots/dra-renata-reis/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: "clinica-renata", source: {} }),
+      })
+    ).json();
+    const eventUrl = `/api/public/chatbots/dra-renata-reis/sessions/${opened.session.id}/events`;
+    await app.request(eventUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "name_captured", name: "Paciente Real", stepId: "name" }),
+    });
+    await app.request(eventUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "intent_selected",
+        intent: "schedule_exam",
+        label: "Agendar exame",
+        stepId: "intent",
+      }),
+    });
+
+    const leadResponse = await app.request(
+      "/api/public/chatbots/dra-renata-reis/leads",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: opened.session.id,
+          clientId: "clinica-renata",
+          name: "Paciente Real",
+          intent: "schedule_exam",
+          selectedExams: ["Ecocardiograma fetal"],
+          medicalRequestStatus: "Sim",
+          source: {},
+        }),
+      },
+    );
+    const created = await leadResponse.json();
+    assert.equal(leadResponse.status, 201);
+
+    const listed = await (await app.request("/api/leads")).json();
+    assert.equal(listed.leads.length, 1);
+    assert.equal(listed.leads[0].status, "appointment_requested");
+    assert.deepEqual(listed.leads[0].selectedExams, ["Ecocardiograma fetal"]);
+    assert.equal(listed.leads[0].events.some((event: { type: string }) => event.type === "lead_created"), true);
+
+    const denied = await app.request(
+      `/api/integrations/leads/${created.lead.id}/converted`,
+      { method: "POST" },
+    );
+    assert.equal(denied.status, 401);
+    const converted = await app.request(
+      `/api/integrations/leads/${created.lead.id}/converted`,
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer test-secret" },
+      },
+    );
+    assert.equal(converted.status, 200);
+    const afterConversion = await (await app.request("/api/leads")).json();
+    assert.equal(afterConversion.leads[0].status, "converted");
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("creates a chatbot with private integration credentials", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-chatbots-"));
 

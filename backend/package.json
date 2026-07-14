@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "qa:live-db": "node --import tsx src/qa/live-db-check.ts",
     "build": "npx prisma generate && tsc",
     "start": "npx prisma migrate deploy && node dist/index.js"
   },

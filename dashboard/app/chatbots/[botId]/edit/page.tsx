@@ -15,7 +15,7 @@ export default function EditChatbotPage({
 }) {
   const { botId } = use(params);
   const router = useRouter();
-  const { findBot, update, bots } = useChatbotActions();
+  const { findBot, update } = useChatbotActions();
   const [remoteBot, setRemoteBot] = useState<Chatbot | null>(null);
   const [loadingRemote, setLoadingRemote] = useState(true);
 
@@ -40,7 +40,7 @@ export default function EditChatbotPage({
 
   const initialBot = useMemo(() => {
     return findBot(botId) ?? remoteBot;
-  }, [findBot, botId, remoteBot, bots]);
+  }, [findBot, botId, remoteBot]);
 
   if (!initialBot && loadingRemote) {
     return (

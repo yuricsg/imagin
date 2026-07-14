@@ -17,16 +17,7 @@ import {
   needsWhatsAppRouting,
   type WhatsAppDestination,
 } from "@/lib/chatbots/whatsapp";
-
-type LeadSource = {
-  pageUrl?: string;
-  landingPageUrl?: string;
-  referrer?: string;
-  parentOrigin?: string;
-  utm?: Record<string, string>;
-  clickIds?: Record<string, string>;
-  cookies?: Record<string, string>;
-};
+import type { ChatSessionTracker, LeadSource } from "./chat-session";
 
 type LeadResponse = {
   lead: { id: string };
@@ -51,6 +42,7 @@ type Props = {
   clientId: string;
   source: LeadSource;
   parentOrigin?: string;
+  sessionTracker: ChatSessionTracker;
 };
 
 export function CustomDialogueChat({
@@ -59,6 +51,7 @@ export function CustomDialogueChat({
   clientId,
   source,
   parentOrigin,
+  sessionTracker,
 }: Props) {
   const dialogue = bot.flow.dialogue as DialogueFlow;
   const [uiStep, setUiStep] = useState<DialogueUiStep>("idle");
@@ -206,12 +199,27 @@ export function CustomDialogueChat({
     setError("");
     setUiStep("idle");
     const fields = extractLeadFieldsFromAnswers(dialogue, nextAnswers);
-    const name = fields.name || "Visitante";
+    const name = fields.name.trim();
+    if (!name) {
+      setError("Este fluxo precisa coletar o nome antes de concluir o atendimento.");
+      setUiStep("step");
+      setIsSubmitting(false);
+      return;
+    }
     // Feeds the {unidade} placeholder in the WhatsApp message template.
     const customFields = chosen?.label
       ? { ...fields.custom, unidade: chosen.label }
       : fields.custom;
+    const intent = intentForTemplate(bot.flow.templateId);
     try {
+      await sessionTracker.trackEvent({
+        type: "intent_selected",
+        intent,
+        label: bot.flow.templateId,
+        flowMode: "custom_dialogue",
+      });
+      await sessionTracker.flush();
+      const sessionId = await sessionTracker.ensureSession();
       const response = await fetch(
         `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
         {
@@ -219,6 +227,7 @@ export function CustomDialogueChat({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             clientId,
+            sessionId: sessionId ?? undefined,
             name,
             phone: fields.phone || undefined,
             email: fields.email || undefined,
@@ -226,7 +235,7 @@ export function CustomDialogueChat({
             customFields: Object.keys(customFields).length
               ? customFields
               : undefined,
-            intent: "schedule_consultation",
+            intent,
             answers: nextAnswers,
             flowMode: "custom_dialogue",
             whatsappDestinationId: chosen?.id,
@@ -236,6 +245,10 @@ export function CustomDialogueChat({
       );
       if (!response.ok) throw new Error(`API respondeu ${response.status}`);
       setLeadResponse((await response.json()) as LeadResponse);
+      await sessionTracker.trackEvent({
+        type: "flow_completed",
+        flowMode: "custom_dialogue",
+      });
       setIsSubmitting(false);
       const isFormalTone = bot.flow.tone === "formal";
       const office = chosen?.label;
@@ -288,12 +301,34 @@ export function CustomDialogueChat({
 
   function selectDestination(chosen: WhatsAppDestination) {
     addMessage("user", chosen.label);
+    void sessionTracker.trackEvent({
+      type: "answer_submitted",
+      stepId: "whatsappDestination",
+      label: chosen.label,
+      value: chosen.id,
+      flowMode: "custom_dialogue",
+    });
     setDestination(chosen);
     void finishFlow(answers, chosen);
   }
 
   function advance(step: FlowStep, answer: string | string[], display: string) {
     addMessage("user", display);
+    void sessionTracker.trackEvent({
+      type: "answer_submitted",
+      stepId: step.id,
+      label: display,
+      value: answer,
+      flowMode: "custom_dialogue",
+    });
+    if (resolveStepSaveAs(step) === "name" && typeof answer === "string") {
+      void sessionTracker.trackEvent({
+        type: "name_captured",
+        stepId: step.id,
+        name: answer,
+        flowMode: "custom_dialogue",
+      });
+    }
     const nextAnswers = { ...answers, [step.id]: answer };
     setAnswers(nextAnswers);
     setTextValue("");
@@ -486,6 +521,12 @@ export function CustomDialogueChat({
                 href={leadResponse.whatsappUrl}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => {
+                  void sessionTracker.trackEvent({
+                    type: "whatsapp_clicked",
+                    flowMode: "custom_dialogue",
+                  });
+                }}
                 className="flex items-center justify-center gap-2 rounded-xl bg-[#25d366] py-3 text-sm font-semibold text-white transition hover:bg-[#1ebe5a]"
               >
                 {destination?.label
@@ -553,4 +594,12 @@ export function configHasCustomDialogue(dashboardConfig: unknown): boolean {
       : null;
   if (!bot?.flow || typeof bot.flow !== "object") return false;
   return hasCustomDialogue(bot.flow as Parameters<typeof hasCustomDialogue>[0]);
+}
+
+function intentForTemplate(
+  templateId: Chatbot["flow"]["templateId"],
+): "schedule_exam" | "schedule_consultation" | "severe_symptoms" {
+  if (templateId === "exam-scheduling") return "schedule_exam";
+  if (templateId === "triage") return "severe_symptoms";
+  return "schedule_consultation";
 }

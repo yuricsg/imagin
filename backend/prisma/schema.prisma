@@ -42,6 +42,14 @@ model Lead {
   medicalRequestStatus  String?
   consultationNeed      String?
   consultationDecision  String?
+  phone                 String?
+  email                 String?
+  message               String?
+  customFields          Json?
+  answers               Json?
+  flowMode              String   @default("legacy")
+  whatsappDestinationId String?
+  sessionId             String?  @unique
   status                String   @default("new")
   whatsappMessage       String
   whatsappUrl           String
@@ -66,4 +74,49 @@ model Lead {
   @@index([botId])
   @@index([createdAt])
   @@map("leads")
+}
+
+model ChatSession {
+  id                     String   @id @default(uuid())
+  botId                  String
+  clientId               String
+  leadId                 String?  @unique
+  visitorName            String?
+  intent                 String?
+  flowMode               String   @default("legacy")
+  currentStep            String?
+  answers                Json?
+  source                 Json?
+  openedAt               DateTime @default(now())
+  lastActivityAt         DateTime @default(now())
+  flowCompletedAt        DateTime?
+  whatsappClickedAt      DateTime?
+  appointmentRequestedAt DateTime?
+  notInterestedAt        DateTime?
+  convertedAt            DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  events                 ChatEvent[]
+
+  @@index([botId, openedAt])
+  @@index([clientId, openedAt])
+  @@index([lastActivityAt])
+  @@map("chat_sessions")
+}
+
+model ChatEvent {
+  id        String      @id @default(uuid())
+  sessionId String
+  botId     String
+  clientId  String
+  type      String
+  stepId    String?
+  label     String?
+  value     Json?
+  createdAt DateTime    @default(now())
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([botId, createdAt])
+  @@map("chat_events")
 }

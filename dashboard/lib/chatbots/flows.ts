@@ -960,6 +960,12 @@ export function validateDialogueFlow(
     issues.push({ message: "Defina a primeira etapa do diálogo." });
   }
 
+  if (!dialogue.steps.some((step) => resolveStepSaveAs(step) === "name")) {
+    issues.push({
+      message: "Adicione uma pergunta salva como Nome do lead.",
+    });
+  }
+
   if (dialogue.shape === "branching") {
     for (const step of dialogue.steps) {
       if (!isChoiceType(step.inputType)) continue;

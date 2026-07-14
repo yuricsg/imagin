@@ -54,8 +54,32 @@ await check("Dashboard chatbot list is available", async () => {
   assert(body.chatbots.some((chatbot) => chatbot.botId === botId), `Missing bot ${botId}`);
 });
 
+await check("Lead API exposes real data and access events without mock fallback", async () => {
+  const response = await request(`${apiUrl}/api/leads`);
+  const body = await response.json();
+  const knownMockNames = new Set([
+    "Camila Andrade",
+    "Rafael Monteiro",
+    "Beatriz Lopes",
+    "Thiago Ferreira",
+    "Larissa Pires",
+    "Juliana Castro",
+    "Marcos Vinícius",
+    "Patrícia Gomes",
+  ]);
+
+  assert(response.status === 200, `Expected 200, got ${response.status}`);
+  assert(Array.isArray(body.leads), "leads must be an array");
+  assert(Array.isArray(body.accesses), "accesses must be an array");
+  assert(
+    !body.leads.some((lead) => knownMockNames.has(lead.name)),
+    "Lead API contains a known dashboard mock",
+  );
+});
+
 if (allowWrites) {
   const qaBotId = `qa-${Date.now()}`;
+  let qaSessionId;
 
   await check("Can create chatbot with selected flow", async () => {
     const response = await request(`${apiUrl}/api/chatbots`, {
@@ -109,12 +133,52 @@ if (allowWrites) {
     );
   });
 
+  await check("Opening a chat creates an access but not an anonymous lead", async () => {
+    const response = await request(`${apiUrl}/api/public/chatbots/${qaBotId}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId: "qa-client",
+        source: { pageUrl: "https://qa.example/session" },
+      }),
+    });
+    const body = await response.json();
+    qaSessionId = body.session?.id;
+    assert(response.status === 201, `Expected 201, got ${response.status}`);
+    assert(qaSessionId, "Session id is missing");
+
+    const listedResponse = await request(`${apiUrl}/api/leads?botId=${qaBotId}`);
+    const listed = await listedResponse.json();
+    assert(listed.accesses.length === 1, "Chat opening was not counted as an access");
+    assert(listed.leads.length === 0, "Anonymous session leaked into the lead list");
+  });
+
+  await check("Name capture creates a real lead candidate with automatic status", async () => {
+    const response = await request(
+      `${apiUrl}/api/public/chatbots/${qaBotId}/sessions/${qaSessionId}/events`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "name_captured",
+          stepId: "name",
+          name: "QA Lead",
+        }),
+      },
+    );
+    assert(response.status === 200, `Expected 200, got ${response.status}`);
+    const listed = await (await request(`${apiUrl}/api/leads?botId=${qaBotId}`)).json();
+    assert(listed.leads.length === 1, "Named session did not become a lead candidate");
+    assert(listed.leads[0].status === "new", "Named session must start as new");
+  });
+
   await check("Can create lead for selected flow", async () => {
     const response = await request(`${apiUrl}/api/public/chatbots/${qaBotId}/leads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         clientId: "qa-client",
+        sessionId: qaSessionId,
         name: "QA Lead",
         intent: "schedule_consultation",
         consultationNeed: "Check-up",
@@ -131,6 +195,12 @@ if (allowWrites) {
     assert(response.status === 201, `Expected 201, got ${response.status}: ${JSON.stringify(body)}`);
     assert(body.lead?.botId === qaBotId, "Lead botId mismatch");
     assert(body.lead?.source?.utm?.source === "qa", "Lead source attribution missing");
+    const listed = await (await request(`${apiUrl}/api/leads?botId=${qaBotId}`)).json();
+    assert(listed.leads.length === 1, "Session and completed lead were duplicated");
+    assert(
+      listed.leads[0].status === "appointment_requested",
+      "Explicit scheduling decision did not update the automatic status",
+    );
   });
 } else {
   results.push({
