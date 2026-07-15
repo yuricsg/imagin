@@ -15,6 +15,8 @@ import {
 import {
   DEFAULT_WHATSAPP_ROUTING_QUESTION,
   needsWhatsAppRouting,
+  resolveWhatsAppMessage,
+  whatsAppUrl,
   type WhatsAppDestination,
 } from "@/lib/chatbots/whatsapp";
 
@@ -51,6 +53,11 @@ type Props = {
   clientId: string;
   source: LeadSource;
   parentOrigin?: string;
+  /**
+   * Dashboard preview: run the whole flow without registering a lead. The
+   * closing WhatsApp message/URL are built client-side from the bot config.
+   */
+  preview?: boolean;
 };
 
 export function CustomDialogueChat({
@@ -59,6 +66,7 @@ export function CustomDialogueChat({
   clientId,
   source,
   parentOrigin,
+  preview = false,
 }: Props) {
   const dialogue = bot.flow.dialogue as DialogueFlow;
   const [uiStep, setUiStep] = useState<DialogueUiStep>("idle");
@@ -176,6 +184,9 @@ export function CustomDialogueChat({
   }, [uiStep, messages.length, leadResponse, error, isBotTyping]);
 
   useEffect(() => {
+    // The dashboard preview isn't inside the embed iframe — nothing listens for
+    // resize there, and the chat is height-bounded by the modal instead.
+    if (preview) return;
     const frame = window.requestAnimationFrame(() => {
       try {
         window.parent.postMessage(
@@ -196,7 +207,15 @@ export function CustomDialogueChat({
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [parentOrigin, uiStep, messages.length, leadResponse, error, isBotTyping]);
+  }, [
+    preview,
+    parentOrigin,
+    uiStep,
+    messages.length,
+    leadResponse,
+    error,
+    isBotTyping,
+  ]);
 
   async function finishFlow(
     nextAnswers: Record<string, string | string[]>,
@@ -212,30 +231,19 @@ export function CustomDialogueChat({
       ? { ...fields.custom, unidade: chosen.label }
       : fields.custom;
     try {
-      const response = await fetch(
-        `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clientId,
+      // Preview mode never touches the network: resolve the WhatsApp handoff
+      // from the in-progress config so the operator sees the real message/link.
+      const leadData = preview
+        ? buildPreviewLeadResponse(bot, name, fields, chosen)
+        : await submitLead(botId, clientId, {
             name,
-            phone: fields.phone || undefined,
-            email: fields.email || undefined,
-            message: fields.message || undefined,
-            customFields: Object.keys(customFields).length
-              ? customFields
-              : undefined,
-            intent: "schedule_consultation",
-            answers: nextAnswers,
-            flowMode: "custom_dialogue",
-            whatsappDestinationId: chosen?.id,
+            fields,
+            customFields,
+            nextAnswers,
+            chosen,
             source,
-          }),
-        },
-      );
-      if (!response.ok) throw new Error(`API respondeu ${response.status}`);
-      setLeadResponse((await response.json()) as LeadResponse);
+          });
+      setLeadResponse(leadData);
       setIsSubmitting(false);
       const isFormalTone = bot.flow.tone === "formal";
       const office = chosen?.label;
@@ -333,7 +341,11 @@ export function CustomDialogueChat({
   const isFormal = bot.flow.tone === "formal";
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-white font-sans text-[#172033]">
+    <div
+      className={`flex flex-col bg-white font-sans text-[#172033] ${
+        preview ? "h-full min-h-104" : "min-h-dvh"
+      }`}
+    >
       <div className="flex items-center gap-3 border-b border-[#e8ecf3] bg-[#205ea8] px-4 py-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-base font-bold text-white">
           {bot.name.charAt(0)}
@@ -505,6 +517,80 @@ export function CustomDialogueChat({
       </div>
     </div>
   );
+}
+
+type LeadFields = ReturnType<typeof extractLeadFieldsFromAnswers>;
+
+/** POSTs the lead to the backend and returns the saved handoff details. */
+async function submitLead(
+  botId: string,
+  clientId: string,
+  input: {
+    name: string;
+    fields: LeadFields;
+    customFields: Record<string, string>;
+    nextAnswers: Record<string, string | string[]>;
+    chosen: WhatsAppDestination | null;
+    source: LeadSource;
+  },
+): Promise<LeadResponse> {
+  const { name, fields, customFields, nextAnswers, chosen, source } = input;
+  const response = await fetch(
+    `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId,
+        name,
+        phone: fields.phone || undefined,
+        email: fields.email || undefined,
+        message: fields.message || undefined,
+        customFields: Object.keys(customFields).length ? customFields : undefined,
+        intent: "schedule_consultation",
+        answers: nextAnswers,
+        flowMode: "custom_dialogue",
+        whatsappDestinationId: chosen?.id,
+        source,
+      }),
+    },
+  );
+  if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+  return (await response.json()) as LeadResponse;
+}
+
+/**
+ * Rebuilds the handoff the backend would produce, but entirely client-side, so
+ * the dashboard preview can show the real WhatsApp message and link without
+ * creating a lead.
+ */
+export function buildPreviewLeadResponse(
+  bot: Chatbot,
+  name: string,
+  fields: LeadFields,
+  chosen: WhatsAppDestination | null,
+): LeadResponse {
+  const message = bot.whatsapp.enabled
+    ? resolveWhatsAppMessage(
+        bot.whatsapp.messageTemplate,
+        bot.name,
+        {
+          nome: name,
+          telefone: fields.phone,
+          email: fields.email,
+          mensagem: fields.message,
+          unidade: chosen?.label ?? "",
+          ...fields.custom,
+        },
+        bot.flow.dialogue?.customSaveLabels,
+      )
+    : "";
+  const phone = chosen?.phoneNumber || bot.whatsapp.phoneNumber;
+  return {
+    lead: { id: "preview" },
+    whatsappMessage: message,
+    whatsappUrl: bot.whatsapp.enabled && phone ? whatsAppUrl(phone, message) : "",
+  };
 }
 
 function BubbleBot({ children }: { children: React.ReactNode }) {

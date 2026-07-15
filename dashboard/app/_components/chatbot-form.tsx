@@ -4,7 +4,13 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { AccentKey, Chatbot, ChatbotStatus } from "@/lib/chatbots/types";
 import { ACCENTS, ACCENT_ORDER } from "@/lib/chatbots/accents";
 import { BOT_STATUS } from "@/lib/labels";
-import { DEFAULT_EMBED, chatbotToInput, type ChatbotInput } from "@/lib/chatbots/create";
+import {
+  buildChatbot,
+  DEFAULT_EMBED,
+  chatbotToInput,
+  type ChatbotInput,
+} from "@/lib/chatbots/create";
+import { CustomDialogueChat } from "@/app/chatbots/[botId]/embed/custom-dialogue-chat";
 import {
   buildFlowPreview,
   BUILTIN_SAVE_AS,
@@ -275,6 +281,11 @@ export function ChatbotForm({
   const [showTracking, setShowTracking] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<ChatbotFieldErrors>({});
+  // Full interactive preview of the finished bot (review step). previewBot is a
+  // throwaway Chatbot built from the current input; previewNonce remounts the
+  // chat so "Recomeçar" replays the flow from the greeting.
+  const [previewBot, setPreviewBot] = useState<Chatbot | null>(null);
+  const [previewNonce, setPreviewNonce] = useState(0);
 
   const titleId = useId();
   const descId = useId();
@@ -304,16 +315,32 @@ export function ChatbotForm({
     }
   }
 
+  function openChatPreview() {
+    setFieldErrors({});
+    // A throwaway id keeps buildChatbot happy; nothing here is persisted.
+    setPreviewBot(buildChatbot(currentInput(), new Set()));
+    setPreviewNonce((n) => n + 1);
+  }
+
+  function restartChatPreview() {
+    setPreviewBot(buildChatbot(currentInput(), new Set()));
+    setPreviewNonce((n) => n + 1);
+  }
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      // Don't close the page while a nested guide dialog is open.
+      // Nested overlays close first; don't drop the whole page underneath them.
       if (shapeGuide) return;
+      if (previewBot) {
+        setPreviewBot(null);
+        return;
+      }
       onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, shapeGuide]);
+  }, [onClose, shapeGuide, previewBot]);
 
   function currentInput(): ChatbotInput {
     return {
@@ -2312,6 +2339,32 @@ export function ChatbotForm({
                     <ReviewRow label="Endereço" value={derivedId} mono />
                   </dl>
 
+                  <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/30">
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                      Testar o chatbot completo
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+                      Converse com o bot exatamente como o visitante vai ver — com
+                      a saudação, o tom, todas as perguntas e o encaminhamento para
+                      o WhatsApp. Nada é salvo e nenhum lead é registrado.
+                    </p>
+                    {flowDialogue ? (
+                      <button
+                        type="button"
+                        onClick={openChatPreview}
+                        className="btn-brand mt-3 px-4 py-2 text-sm"
+                      >
+                        Testar conversa completa
+                      </button>
+                    ) : (
+                      <p className="mt-3 text-xs italic text-zinc-500 dark:text-zinc-400">
+                        A prévia interativa está disponível para bots com o
+                        construtor de conversa. Volte à etapa “Atendimento” para
+                        montar as perguntas.
+                      </p>
+                    )}
+                  </div>
+
                   <div className="overflow-hidden rounded-xl border border-zinc-200/70 dark:border-zinc-800/70">
                     <button
                       type="button"
@@ -2529,7 +2582,84 @@ export function ChatbotForm({
           onConfirm={confirmShapeGuide}
         />
       ) : null}
+
+      {previewBot ? (
+        <ChatPreviewDialog
+          bot={previewBot}
+          previewNonce={previewNonce}
+          onRestart={restartChatPreview}
+          onClose={() => setPreviewBot(null)}
+        />
+      ) : null}
     </main>
+  );
+}
+
+/** Modal running the real widget in preview mode, framed like a phone. */
+function ChatPreviewDialog({
+  bot,
+  previewNonce,
+  onRestart,
+  onClose,
+}: {
+  bot: Chatbot;
+  previewNonce: number;
+  onRestart: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-3 sm:items-center sm:p-4">
+      <button
+        type="button"
+        aria-label="Fechar prévia"
+        onClick={onClose}
+        className="absolute inset-0 bg-zinc-950/50 backdrop-blur-sm"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Prévia da conversa com ${bot.name}`}
+        className="relative z-10 flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-200/70 px-4 py-2.5 dark:border-zinc-800/70">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Prévia da conversa
+            </p>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Nada é salvo — nenhum lead é registrado
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={onRestart}
+              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Recomeçar
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar prévia"
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            >
+              <IconX className="size-4" />
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+          <CustomDialogueChat
+            key={previewNonce}
+            preview
+            bot={bot}
+            botId={bot.id}
+            clientId={bot.clientId}
+            source={{}}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
