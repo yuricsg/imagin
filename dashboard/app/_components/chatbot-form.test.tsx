@@ -3,7 +3,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -333,7 +332,7 @@ describe("ChatbotForm (wizard)", () => {
     ).toBeGreaterThan(0);
     expect(
       screen.getByRole("button", { name: "Enviar foto" }),
-    ).toBeDisabled();
+    ).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: /Robô feminino/i }));
     expect(

@@ -33,6 +33,7 @@ export type LeadSource = {
 export type LeadSubmission = {
   botId: string;
   clientId: string;
+  sessionId?: string;
   name: string;
   intent: LeadIntent;
   selectedExams?: string[];
@@ -64,7 +65,13 @@ export type CreateLeadRecordInput = LeadSubmission & {
 
 export type LeadRecord = CreateLeadRecordInput & {
   id: string;
-  status: "new" | "contacted" | "archived";
+  status:
+    | "new"
+    | "whatsapp_handoff"
+    | "appointment_requested"
+    | "not_interested"
+    | "abandoned"
+    | "converted";
   createdAt: string;
   updatedAt: string;
 };

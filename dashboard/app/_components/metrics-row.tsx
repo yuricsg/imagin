@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { DashboardMetrics } from "@/lib/chatbots/types";
 import { percent } from "@/lib/format";
-import { IconBolt, IconInbox, IconTrendingUp, IconUsers } from "./icons";
+import { IconInbox, IconTrendingUp, IconUsers } from "./icons";
 
 function MetricCard({
   label,
@@ -68,30 +68,30 @@ export function MetricsRow({ metrics }: { metrics: DashboardMetrics }) {
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <MetricCard
-        label="Chatbots ativos"
-        value={String(metrics.activeBots)}
-        sub={`de ${metrics.totalBots} no catálogo`}
-        icon={<IconBolt className="size-4.5" />}
+        label="Acessos"
+        value={String(metrics.totalAccesses)}
+        sub="pessoas que abriram o chatbot"
+        icon={<IconUsers className="size-4.5" />}
         accent="emerald"
       />
       <MetricCard
-        label="Leads no total"
+        label="Leads identificados"
         value={String(metrics.totalLeads)}
-        sub={`${metrics.leads7d} nos últimos 7 dias`}
-        icon={<IconUsers className="size-4.5" />}
+        sub="informaram o nome no fluxo"
+        icon={<IconInbox className="size-4.5" />}
         accent="indigo"
       />
       <MetricCard
-        label="Leads hoje"
-        value={String(metrics.leadsToday)}
-        sub={`${metrics.newLeads} aguardando contato`}
-        icon={<IconInbox className="size-4.5" />}
+        label="Agendamentos solicitados"
+        value={String(metrics.appointmentRequests)}
+        sub="intenção explícita de agendar"
+        icon={<IconTrendingUp className="size-4.5" />}
         accent="sky"
       />
       <MetricCard
         label="Taxa de conversão"
         value={percent(metrics.conversionRate)}
-        sub="sobre o total de leads"
+        sub={`${metrics.convertedLeads} confirmados externamente`}
         icon={<IconTrendingUp className="size-4.5" />}
         accent="violet"
       />

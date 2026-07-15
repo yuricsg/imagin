@@ -1,38 +1,23 @@
-import type { Chatbot, DashboardMetrics, Lead } from "./chatbots/types";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import type { ChatAccess, DashboardMetrics, Lead } from "./chatbots/types";
 
 export function computeMetrics(
-  bots: Chatbot[],
   leads: Lead[],
-  nowMs: number,
+  accesses: ChatAccess[],
 ): DashboardMetrics {
-  const todayStart = new Date(nowMs);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartMs = todayStart.getTime();
-  const weekAgoMs = nowMs - 7 * DAY_MS;
-
-  let leadsToday = 0;
-  let leads7d = 0;
   let converted = 0;
-  let newLeads = 0;
+  let appointmentRequests = 0;
 
   for (const lead of leads) {
-    const ts = Date.parse(lead.createdAt);
-    if (ts >= todayStartMs) leadsToday += 1;
-    if (ts >= weekAgoMs) leads7d += 1;
     if (lead.status === "converted") converted += 1;
-    if (lead.status === "new") newLeads += 1;
+    if (lead.status === "appointment_requested") appointmentRequests += 1;
   }
 
   return {
-    activeBots: bots.filter((b) => b.status === "active").length,
-    totalBots: bots.length,
+    totalAccesses: accesses.length,
     totalLeads: leads.length,
-    leadsToday,
-    leads7d,
+    appointmentRequests,
+    convertedLeads: converted,
     conversionRate: leads.length === 0 ? 0 : converted / leads.length,
-    newLeads,
   };
 }
 

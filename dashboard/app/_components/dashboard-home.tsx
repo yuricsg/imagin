@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
-import type { Chatbot, Client, LeadStatus } from "@/lib/chatbots/types";
+import type { Chatbot, Client, Lead, LeadStatus } from "@/lib/chatbots/types";
 import type { DashboardData } from "@/lib/dashboard";
 import { ACCENTS } from "@/lib/chatbots/accents";
 import { computeMetrics } from "@/lib/metrics";
+import {
+  buildLeadsCsv,
+  isWithinDateRange,
+  reportFilename,
+  type DateRange,
+} from "@/lib/lead-report";
 import {
   getCreatedBots,
   getServerCreatedBots,
@@ -18,32 +24,30 @@ import { apiDeleteChatbot } from "@/lib/api/chatbots";
 import { MetricsRow } from "./metrics-row";
 import { ChatbotList } from "./chatbot-list";
 import { EmbedBlock } from "./embed-block";
-import { LeadsToolbar, type PeriodFilter } from "./leads-toolbar";
+import { LeadsToolbar } from "./leads-toolbar";
 import { LeadsTable } from "./leads-table";
+import { LeadDetailsModal } from "./lead-details-modal";
 import { EmptyState } from "./ui";
-import { IconBot, IconInboxStack, IconPlus } from "./icons";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function periodThreshold(period: PeriodFilter, nowMs: number): number | null {
-  if (period === "all") return null;
-  if (period === "today") {
-    const start = new Date(nowMs);
-    start.setHours(0, 0, 0, 0);
-    return start.getTime();
-  }
-  return period === "7d" ? nowMs - 7 * DAY_MS : nowMs - 30 * DAY_MS;
-}
+import { IconAlert, IconBot, IconInboxStack, IconPlus } from "./icons";
 
 export function DashboardHome({ data }: { data: DashboardData }) {
   const router = useRouter();
-  const { bots: serverBots, leads, botActivity, dbBotIds, nowMs } = data;
+  const {
+    bots: serverBots,
+    leads,
+    accesses = [],
+    dataError = null,
+    botActivity,
+    dbBotIds,
+    nowMs,
+  } = data;
 
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [clientId, setClientId] = useState<string>("all");
   const [status, setStatus] = useState<LeadStatus | "all">("all");
-  const [period, setPeriod] = useState<PeriodFilter>("all");
+  const [dateRange, setDateRange] = useState<DateRange>({ start: "", end: "" });
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   // IDs of bots deleted this session — filtered out immediately without page reload.
   const [deletedBotIds, setDeletedBotIds] = useState<Set<string>>(new Set());
 
@@ -99,11 +103,6 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     );
   }, [bots]);
 
-  const metrics = useMemo(
-    () => computeMetrics(bots, leads, nowMs),
-    [bots, leads, nowMs],
-  );
-
   const selectedBot = selectedBotId ? botsById[selectedBotId] ?? null : null;
 
   function handleDelete(id: string) {
@@ -116,30 +115,47 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     );
   }
 
-  const filteredLeads = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const threshold = periodThreshold(period, nowMs);
+  const contextLeads = useMemo(() => {
     return leads.filter((lead) => {
       if (selectedBotId && lead.botId !== selectedBotId) return false;
       if (clientId !== "all" && lead.clientId !== clientId) return false;
+      if (!isWithinDateRange(lead.createdAt, dateRange)) return false;
+      return true;
+    });
+  }, [leads, selectedBotId, clientId, dateRange]);
+
+  const contextAccesses = useMemo(() => {
+    return accesses.filter((access) => {
+      if (selectedBotId && access.botId !== selectedBotId) return false;
+      if (clientId !== "all" && access.clientId !== clientId) return false;
+      return isWithinDateRange(access.openedAt, dateRange);
+    });
+  }, [accesses, selectedBotId, clientId, dateRange]);
+
+  const metrics = useMemo(
+    () => computeMetrics(contextLeads, contextAccesses),
+    [contextAccesses, contextLeads],
+  );
+
+  const filteredLeads = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return contextLeads.filter((lead) => {
       if (status !== "all" && lead.status !== status) return false;
-      if (threshold !== null && Date.parse(lead.createdAt) < threshold) {
-        return false;
-      }
       if (query) {
         const haystack =
-          `${lead.name} ${lead.email} ${lead.phone} ${lead.message} ${lead.sourceUrl}`.toLowerCase();
+          `${lead.name} ${lead.email} ${lead.phone} ${lead.message} ${lead.sourceUrl} ${lead.classification.primary}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       return true;
     });
-  }, [leads, selectedBotId, clientId, status, period, search, nowMs]);
+  }, [contextLeads, status, search]);
 
   const hasActiveFilters =
     selectedBotId !== null ||
     clientId !== "all" ||
     status !== "all" ||
-    period !== "all" ||
+    dateRange.start !== "" ||
+    dateRange.end !== "" ||
     search.trim() !== "";
 
   function clearFilters() {
@@ -147,7 +163,20 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     setSearch("");
     setClientId("all");
     setStatus("all");
-    setPeriod("all");
+    setDateRange({ start: "", end: "" });
+  }
+
+  function exportCsv() {
+    const csv = buildLeadsCsv(filteredLeads, botsById);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = reportFilename(dateRange);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   return (
@@ -174,6 +203,13 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       </div>
 
       <MetricsRow metrics={metrics} />
+
+      {dataError ? (
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200">
+          <IconAlert className="mt-0.5 size-4 shrink-0" />
+          <p>{dataError} Nenhum dado fictício foi exibido.</p>
+        </div>
+      ) : null}
 
       {bots.length === 0 ? (
         <section className="rounded-xl border border-dashed border-zinc-300/90 bg-white/70 px-5 py-8 text-center dark:border-zinc-700/80 dark:bg-zinc-900/40 sm:px-8 sm:py-10">
@@ -205,9 +241,9 @@ export function DashboardHome({ data }: { data: DashboardData }) {
                 Leads
               </h2>
               <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                {filteredLeads.length === leads.length
-                  ? `${leads.length} no total`
-                  : `${filteredLeads.length} de ${leads.length}`}
+                {filteredLeads.length === contextLeads.length
+                  ? `${contextLeads.length} no período`
+                  : `${filteredLeads.length} de ${contextLeads.length}`}
               </span>
             </div>
             {selectedBot ? (
@@ -229,12 +265,14 @@ export function DashboardHome({ data }: { data: DashboardData }) {
             onClient={setClientId}
             status={status}
             onStatus={setStatus}
-            period={period}
-            onPeriod={setPeriod}
+            dateRange={dateRange}
+            onDateRange={setDateRange}
             bots={bots}
             clients={clients}
             hasActiveFilters={hasActiveFilters}
             onClear={clearFilters}
+            onExport={exportCsv}
+            exportDisabled={filteredLeads.length === 0}
           />
 
           {filteredLeads.length > 0 ? (
@@ -243,6 +281,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               botsById={botsById}
               showBotColumn={selectedBotId === null}
               nowMs={nowMs}
+              onOpenLead={setSelectedLead}
             />
           ) : hasActiveFilters ? (
             <EmptyState
@@ -297,6 +336,14 @@ export function DashboardHome({ data }: { data: DashboardData }) {
           )}
         </div>
       </div>
+
+      {selectedLead ? (
+        <LeadDetailsModal
+          lead={selectedLead}
+          bot={botsById[selectedLead.botId]}
+          onClose={() => setSelectedLead(null)}
+        />
+      ) : null}
     </main>
   );
 }

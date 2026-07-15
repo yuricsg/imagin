@@ -14,14 +14,14 @@ export const LEAD_STATUS: Record<LeadStatus, StatusMeta> = {
       "bg-blue-500/15 text-blue-700 ring-blue-600/25 dark:bg-blue-400/15 dark:text-blue-300 dark:ring-blue-400/25",
     dot: "bg-blue-500",
   },
-  contacted: {
-    label: "Em contato",
+  whatsapp_handoff: {
+    label: "Encaminhado para WhatsApp",
     badge:
       "bg-amber-500/15 text-amber-700 ring-amber-600/25 dark:bg-amber-400/15 dark:text-amber-300 dark:ring-amber-400/25",
     dot: "bg-amber-500",
   },
-  qualified: {
-    label: "Qualificado",
+  appointment_requested: {
+    label: "Agendamento solicitado",
     badge:
       "bg-violet-500/15 text-violet-700 ring-violet-600/25 dark:bg-violet-400/15 dark:text-violet-300 dark:ring-violet-400/25",
     dot: "bg-violet-500",
@@ -32,8 +32,14 @@ export const LEAD_STATUS: Record<LeadStatus, StatusMeta> = {
       "bg-emerald-500/15 text-emerald-700 ring-emerald-600/25 dark:bg-emerald-400/15 dark:text-emerald-300 dark:ring-emerald-400/25",
     dot: "bg-emerald-500",
   },
-  lost: {
-    label: "Perdido",
+  not_interested: {
+    label: "Sem interesse",
+    badge:
+      "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-300 dark:ring-rose-400/20",
+    dot: "bg-rose-400",
+  },
+  abandoned: {
+    label: "Abandonado",
     badge:
       "bg-zinc-500/10 text-zinc-600 ring-zinc-500/20 dark:bg-zinc-400/10 dark:text-zinc-400 dark:ring-zinc-400/20",
     dot: "bg-zinc-400",
@@ -42,10 +48,11 @@ export const LEAD_STATUS: Record<LeadStatus, StatusMeta> = {
 
 export const LEAD_STATUS_ORDER: LeadStatus[] = [
   "new",
-  "contacted",
-  "qualified",
+  "whatsapp_handoff",
+  "appointment_requested",
+  "not_interested",
+  "abandoned",
   "converted",
-  "lost",
 ];
 
 export const LEAD_CHANNEL: Record<

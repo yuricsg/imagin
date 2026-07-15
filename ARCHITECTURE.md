@@ -13,10 +13,13 @@ The repository currently contains a Next.js dashboard in `dashboard/` and a Hono
 - Chatbot iframe: implemented at `/chatbots/[botId]/embed`.
 - Chatbot registry: static defaults in `backend/src/chatbots/catalog.ts` plus custom bots created through the dashboard.
 - Persistence: Prisma/Postgres for runtime repositories, with local JSON repositories retained for focused tests and fallback development.
+- Conversation analytics: `chat_sessions` records one access when the lazy iframe opens; `chat_events` records name, intent, answers, completion, WhatsApp click, and confirmed conversion.
 - Attribution: widget captures UTM parameters, click IDs, referrer, page URL, landing page URL, `_fbp`, `_fbc`, and GA client ID from `_ga`.
 - Tracking dispatch: backend can send Meta Conversions API and GA4 Measurement Protocol events after lead creation.
 - Authentication: not configured.
 - Multi-client model: `botId` and `clientId` are accepted, stored, listed, and filterable, but there is no authenticated organization/client model yet.
+- Dashboard reporting: top metrics, lead list, and CSV share the selected chatbot/client/date context. Lead details open in an accessible modal.
+- Real-data rule: dashboard lead loading has no mock fallback. API failure produces an explicit error and an empty list.
 
 The current MVP proves the embed-to-dashboard lead path with a production database. Authentication remains future work. A dialogue builder for new bots is available in the dedicated create/edit wizard pages (`/chatbots/new`, `/chatbots/[botId]/edit`); legacy bots keep their existing runtime.
 
@@ -44,6 +47,45 @@ Dashboard-managed bots can choose one conversation flow:
 - `consultation_scheduling`: consultation scheduling only.
 - `urgent_triage`: urgent triage only.
 
+## Automatic Lead Funnel
+
+The widget creates a chat session only when the visitor opens the launcher and the lazy iframe mounts. An anonymous session counts as an access but is not returned as a lead. `name_captured` makes the session eligible for the lead list.
+
+Lead status is derived automatically with this precedence:
+
+1. `converted`: a trusted external system called the conversion webhook.
+2. `not_interested`: the visitor explicitly chose a no-interest answer.
+3. `appointment_requested`: an exam scheduling intent or explicit scheduling answer was recorded.
+4. `whatsapp_handoff`: the visitor clicked the WhatsApp CTA without a stronger outcome.
+5. `abandoned`: a named session has no stronger outcome and has been inactive for at least 30 minutes.
+6. `new`: the named session is still active or awaiting a stronger event.
+
+Opening a WhatsApp URL does not prove conversion. Conversion requires `POST /api/integrations/leads/:leadId/converted` with `Authorization: Bearer $CONVERSION_WEBHOOK_SECRET`. This endpoint is intended for an agenda, CRM, or WhatsApp automation that has confirmed the appointment.
+
+## Database Migration And Compatibility
+
+Migration `20260714120000_add_chat_sessions_and_lead_details` is additive and
+keeps all existing lead rows intact:
+
+- Existing `leads` rows receive nullable contact, answer, destination, and
+  session-link columns. `flowMode` defaults to `legacy`, so older records keep
+  their original interpretation.
+- `chat_sessions` stores one access per opened iframe, current progress, source,
+  and automatic-funnel timestamps. A unique optional `leadId` prevents one
+  completed lead from being attached to multiple sessions.
+- `chat_events` is the ordered audit trail for each session. Its foreign key
+  uses `ON DELETE CASCADE`, so removing a session also removes its event history.
+- `leads.sessionId` is optional and unique. Older leads remain valid without a
+  session, while new chatbot submissions can be merged with their in-progress
+  session without producing duplicate dashboard rows.
+- Composite indexes support reporting by chatbot/client and opening date;
+  timeline indexes support ordered event reads without scanning all events.
+
+Production deploys run `prisma migrate deploy` before starting the API. The
+repository's `npm run qa:live-db` check must pass after migration: it writes an
+isolated `qa-live-*` session and lead, validates the complete database contract,
+and removes the QA data even if an assertion fails.
+
 ### Custom dialogue builder (new bots)
 
 New bots created on `/chatbots/new` (or edited on `/chatbots/[botId]/edit`) can define a `DialogueFlow` stored on `Chatbot.flow.dialogue`:
@@ -61,7 +103,7 @@ Custom-dialogue lead submissions send `flowMode: "custom_dialogue"` plus optiona
 Dashboard bots store `Chatbot.launcher`:
 
 - `teaserTexts: string[]` — rotating lines inside the speech bubble (required, at least one).
-- `avatarUrl: string | null` — custom photo URL or built-in preset path (`/embed/robot-helper.png`, `/embed/robot-helper-feminine.png`); `null` uses the friendly cartoon robot. Custom photo upload UI exists in the wizard but is disabled (“Em desenvolvimento”) until storage is wired.
+- `avatarUrl: string | null` — custom photo URL, uploaded data URL, or built-in preset path (`/embed/robot-helper.png`, `/embed/robot-helper-feminine.png`); `null` uses the friendly cartoon robot.
 
 On create/update, the dashboard API mirrors `launcher.teaserTexts` into backend `buttonTexts` for compatibility. Public config (`GET /api/public/chatbots/:botId/config`) exposes `launcher` (from `dashboardConfig.launcher`, falling back to `buttonTexts`).
 
@@ -140,6 +182,8 @@ Public widget routes:
 - `GET /chatbots/[botId]/embed`: iframe UI route.
 - `GET /api/public/chatbots/[botId]/config`: public-safe bot configuration on the Hono backend.
 - `POST /api/public/chatbots/[botId]/leads`: creates lead records on the Hono backend.
+- `POST /api/public/chatbots/[botId]/sessions`: records a chatbot access and returns an opaque session id.
+- `POST /api/public/chatbots/[botId]/sessions/[sessionId]/events`: appends public conversation events.
 - Optional tracking side effects from the lead endpoint:
   - Meta Conversions API `Lead` event.
   - GA4 Measurement Protocol `generate_lead` event.
@@ -149,15 +193,12 @@ Dashboard routes:
 - `GET /`: lead overview.
 - `GET /api/chatbots`: configured chatbot catalog on the Hono backend.
 - `POST /api/chatbots`: creates a dashboard-managed chatbot with private tracking credentials stored server-side.
-- `GET /api/leads`: lead list on the Hono backend.
+- `GET /api/leads`: returns access summaries and a lead list where named sessions are merged with completed leads without duplication.
 - `GET /api/leads?botId=[botId]`: bot-scoped lead list.
 - `GET /api/leads?clientId=[clientId]`: client-scoped lead list.
 
 Planned routes:
 
-- `POST /api/public/chatbots/[botId]/sessions`: create a visitor chat session.
-- `POST /api/public/chatbots/[botId]/events`: append message or state-transition events.
-- `GET /dashboard/leads/[leadId]`: lead detail and conversation timeline.
 - `GET /dashboard/chatbots`: chatbot list.
 - `GET /dashboard/chatbots/[botId]`: flow/config editor.
 
@@ -174,13 +215,13 @@ Core entities:
 - `chatbot_versions`
   - Stores versioned flow definitions so historic leads remain explainable after bot edits.
 - `chat_sessions`
-  - Tracks one visitor interaction from a site/session.
+  - Tracks one visitor interaction from opening through the latest activity, including automatic-funnel timestamps.
 - `chat_messages`
   - Stores normalized user and bot messages.
 - `lead_submissions`
   - Stores structured lead fields and current lead status.
 - `lead_events`
-  - Stores timeline events: opened, answered name, selected intent, submitted WhatsApp, handed off, closed.
+  - Implemented as `chat_events`; stores opened, name, intent, answers, completion, handoff, and conversion confirmation.
 - `allowed_origins`
   - Defines which client domains can load each bot.
 
@@ -257,11 +298,9 @@ For the Dra. Renata Reis flow, the structured lead payload currently includes:
 13. Done: add QA agent documentation and smoke runner.
 14. Done: make the iframe interaction conversational with user-message echoes and bot typing states.
 15. Next: add tests for remaining critical flows:
-   - session creation
-   - consultation lead API submission
-   - severe symptom handoff
    - allowed-origin enforcement
-   - browser-level embed flow
+   - full browser automation for every built-in flow
+16. Done: add chat sessions, event timeline, automatic statuses, access metrics, date-range reporting, lead modal, CSV export, and no-mock failure handling.
 
 ## Validation Requirements
 
@@ -274,6 +313,8 @@ Before production use:
 - `node qa/qa-agent.mjs` against local or production URLs.
 - Browser test for real embed snippet on a representative external page.
 - Live database test for bot creation, selected flow, lead persistence, and migration compatibility.
+- Live database test for session creation, event append, linked lead detail, and automatic status derivation.
+- Run `cd backend && npm run qa:live-db` with `DATABASE_URL` set after applying migrations. The check creates isolated `qa-live-*` data, validates access, lead linkage, timeline, automatic status, and trusted conversion, then deletes every QA row in a `finally` block.
 
 ## Open Decisions
 

@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeStoredChatbot } from "@/lib/chatbots/create";
 import { hasCustomDialogue, resolveGreeting } from "@/lib/chatbots/flows";
 import { CustomDialogueChat } from "./custom-dialogue-chat";
+import {
+  createChatSessionTracker,
+  type LeadSource,
+} from "./chat-session";
 
 type LeadIntent =
   | "schedule_exam"
@@ -61,16 +65,6 @@ type LeadResponse = {
   lead: { id: string; intent: LeadIntent };
   whatsappMessage: string;
   whatsappUrl: string;
-};
-
-type LeadSource = {
-  pageUrl?: string;
-  landingPageUrl?: string;
-  referrer?: string;
-  parentOrigin?: string;
-  utm?: Record<string, string>;
-  clickIds?: Record<string, string>;
-  cookies?: Record<string, string>;
 };
 
 type ChatMessage = {
@@ -278,7 +272,10 @@ export function EmbeddedChatbot({
     const bot = resolveDashboardBot(config);
     if (bot && hasCustomDialogue(bot.flow)) return;
     introStartedRef.current = true;
-    void playBotMessages(resolveIntroMessages(config), () => setActiveStep("name"));
+    const frame = window.requestAnimationFrame(() => {
+      void playBotMessages(resolveIntroMessages(config), () => setActiveStep("name"));
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [config, configError, isConfigLoading, playBotMessages]);
 
   useEffect(() => {
@@ -307,6 +304,19 @@ export function EmbeddedChatbot({
     }),
     [initialSource, pageUrl, parentOrigin],
   );
+  const sessionTracker = useMemo(
+    () =>
+      createChatSessionTracker({
+        apiBaseUrl,
+        botId,
+        clientId,
+        source,
+      }),
+    [botId, clientId, source],
+  );
+  useEffect(() => {
+    void sessionTracker.ensureSession();
+  }, [sessionTracker]);
   const allowedIntents = config.conversationFlow?.intents ?? fallbackConfig.conversationFlow.intents;
   const canScheduleExam = allowedIntents.includes("schedule_exam");
   const canScheduleConsultation = allowedIntents.includes("schedule_consultation");
@@ -325,6 +335,7 @@ export function EmbeddedChatbot({
         clientId={clientId}
         source={source}
         parentOrigin={parentOrigin}
+        sessionTracker={sessionTracker}
       />
     );
   }
@@ -334,6 +345,11 @@ export function EmbeddedChatbot({
     if (trimmedName.length < 2) return;
 
     addUserMessage(trimmedName);
+    void sessionTracker.trackEvent({
+      type: "name_captured",
+      stepId: "name",
+      name: trimmedName,
+    });
     void playBotMessages(
       isFormal
         ? [`Obrigado, ${trimmedName}.`, "Como podemos ajudar você hoje?"]
@@ -343,6 +359,18 @@ export function EmbeddedChatbot({
   }
 
   function selectIntent(intent: LeadIntent) {
+    const label =
+      intent === "schedule_exam"
+        ? "Agendar exame"
+        : intent === "schedule_consultation"
+          ? "Marcar consulta cardiológica"
+          : "Avaliação de sintomas graves";
+    void sessionTracker.trackEvent({
+      type: "intent_selected",
+      stepId: "intent",
+      intent,
+      label,
+    });
     if (intent === "schedule_exam") {
       addUserMessage("Agendar exame");
       setSelectedExams([]);
@@ -373,6 +401,12 @@ export function EmbeddedChatbot({
   function continueWithSelectedExams() {
     if (selectedExams.length === 0) return;
     addUserMessage(selectedExams.join(", "));
+    void sessionTracker.trackEvent({
+      type: "answer_submitted",
+      stepId: "examSelection",
+      label: selectedExams.join(", "),
+      value: selectedExams,
+    });
     void playBotMessages(
       ["Você possui solicitação médica para esse(s) exame(s)?"],
       () => setActiveStep("medicalRequest"),
@@ -381,6 +415,12 @@ export function EmbeddedChatbot({
 
   function selectConsultationNeed(need: string) {
     addUserMessage(need);
+    void sessionTracker.trackEvent({
+      type: "answer_submitted",
+      stepId: "consultationNeed",
+      label: need,
+      value: need,
+    });
     setConsultationNeed(need);
     const isNewBot = Boolean(config.dashboardConfig);
     const messages = isNewBot
@@ -403,6 +443,8 @@ export function EmbeddedChatbot({
     setError("");
     setActiveStep("idle");
     try {
+      await sessionTracker.flush();
+      const sessionId = await sessionTracker.ensureSession();
       const response = await fetch(
         `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
         {
@@ -410,6 +452,7 @@ export function EmbeddedChatbot({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             clientId,
+            sessionId: sessionId ?? undefined,
             name: name.trim(),
             intent: payload.intent,
             selectedExams,
@@ -422,6 +465,7 @@ export function EmbeddedChatbot({
       );
       if (!response.ok) throw new Error(`API respondeu ${response.status}`);
       setLeadResponse((await response.json()) as LeadResponse);
+      await sessionTracker.trackEvent({ type: "flow_completed" });
       setIsSubmitting(false);
       await playBotMessages(resolveCompletionMessages(config), () => setActiveStep("complete"));
     } catch (caughtError) {
@@ -581,6 +625,12 @@ export function EmbeddedChatbot({
                 disabled={isSubmitting}
                 onClick={() => {
                   addUserMessage(option);
+                  void sessionTracker.trackEvent({
+                    type: "answer_submitted",
+                    stepId: "medicalRequest",
+                    label: option,
+                    value: option,
+                  });
                   void submitLead(
                     { intent: "schedule_exam", medicalRequestStatus: option },
                     "medicalRequest",
@@ -616,6 +666,12 @@ export function EmbeddedChatbot({
                 disabled={isSubmitting}
                 onClick={() => {
                   addUserMessage(decision);
+                  void sessionTracker.trackEvent({
+                    type: "answer_submitted",
+                    stepId: "consultationDecision",
+                    label: decision,
+                    value: decision,
+                  });
                   void submitLead(
                     {
                       intent: "schedule_consultation",
@@ -647,6 +703,9 @@ export function EmbeddedChatbot({
               href={leadResponse.whatsappUrl}
               target="_blank"
               rel="noreferrer"
+              onClick={() => {
+                void sessionTracker.trackEvent({ type: "whatsapp_clicked" });
+              }}
               className="flex items-center justify-center gap-2 rounded-xl bg-[#25d366] py-3 text-sm font-semibold text-white transition hover:bg-[#1ebe5a]"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">

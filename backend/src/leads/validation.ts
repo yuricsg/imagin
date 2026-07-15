@@ -30,11 +30,16 @@ export function validateLeadSubmission(
 
   const clientId = readRequiredString(rawBody, "clientId", issues);
   const name = readRequiredString(rawBody, "name", issues);
+  const sessionId = readOptionalString(rawBody.sessionId);
   const intent = readIntent(rawBody.intent, issues);
-  const source = readSource(rawBody.source);
+  const source = readLeadSource(rawBody.source);
   const flowMode =
     rawBody.flowMode === "custom_dialogue" ? "custom_dialogue" : "legacy";
   const isCustomDialogue = flowMode === "custom_dialogue";
+
+  if (isCustomDialogue && name.toLocaleLowerCase("pt-BR") === "visitante") {
+    issues.push("name must identify a real visitor");
+  }
 
   if (
     !isCustomDialogue &&
@@ -51,6 +56,7 @@ export function validateLeadSubmission(
     source,
     flowMode,
   };
+  if (sessionId) submission.sessionId = sessionId;
 
   const phone = readOptionalString(rawBody.phone);
   const email = readOptionalString(rawBody.email);
@@ -159,6 +165,7 @@ export function leadToDto(lead: LeadRecord) {
     id: lead.id,
     botId: lead.botId,
     clientId: lead.clientId,
+    sessionId: lead.sessionId ?? null,
     name: lead.name,
     intent: lead.intent,
     selectedExams: lead.selectedExams ?? [],
@@ -257,7 +264,7 @@ function readIntent(value: unknown, issues: string[]): LeadIntent {
   return "severe_symptoms";
 }
 
-function readSource(value: unknown): LeadSource {
+export function readLeadSource(value: unknown): LeadSource {
   if (!isRecord(value)) {
     return {};
   }

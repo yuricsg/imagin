@@ -19,16 +19,7 @@ import {
   whatsAppUrl,
   type WhatsAppDestination,
 } from "@/lib/chatbots/whatsapp";
-
-type LeadSource = {
-  pageUrl?: string;
-  landingPageUrl?: string;
-  referrer?: string;
-  parentOrigin?: string;
-  utm?: Record<string, string>;
-  clickIds?: Record<string, string>;
-  cookies?: Record<string, string>;
-};
+import type { ChatSessionTracker, LeadSource } from "./chat-session";
 
 type LeadResponse = {
   lead: { id: string };
@@ -53,9 +44,11 @@ type Props = {
   clientId: string;
   source: LeadSource;
   parentOrigin?: string;
+  sessionTracker: ChatSessionTracker;
   /**
    * Dashboard preview: run the whole flow without registering a lead. The
    * closing WhatsApp message/URL are built client-side from the bot config.
+   * A no-op sessionTracker keeps event calls harmless in this mode.
    */
   preview?: boolean;
 };
@@ -66,6 +59,7 @@ export function CustomDialogueChat({
   clientId,
   source,
   parentOrigin,
+  sessionTracker,
   preview = false,
 }: Props) {
   const dialogue = bot.flow.dialogue as DialogueFlow;
@@ -225,25 +219,62 @@ export function CustomDialogueChat({
     setError("");
     setUiStep("idle");
     const fields = extractLeadFieldsFromAnswers(dialogue, nextAnswers);
-    const name = fields.name || "Visitante";
+    const name = fields.name.trim();
+    if (!name) {
+      setError("Este fluxo precisa coletar o nome antes de concluir o atendimento.");
+      setUiStep("step");
+      setIsSubmitting(false);
+      return;
+    }
     // Feeds the {unidade} placeholder in the WhatsApp message template.
     const customFields = chosen?.label
       ? { ...fields.custom, unidade: chosen.label }
       : fields.custom;
+    const intent = intentForTemplate(bot.flow.templateId);
     try {
-      // Preview mode never touches the network: resolve the WhatsApp handoff
-      // from the in-progress config so the operator sees the real message/link.
-      const leadData = preview
-        ? buildPreviewLeadResponse(bot, name, fields, chosen)
-        : await submitLead(botId, clientId, {
-            name,
-            fields,
-            customFields,
-            nextAnswers,
-            chosen,
-            source,
-          });
-      setLeadResponse(leadData);
+      if (preview) {
+        // Preview never touches the network: resolve the WhatsApp handoff from
+        // the in-progress config so the operator sees the real message/link.
+        setLeadResponse(buildPreviewLeadResponse(bot, name, fields, chosen));
+      } else {
+        await sessionTracker.trackEvent({
+          type: "intent_selected",
+          intent,
+          label: bot.flow.templateId,
+          flowMode: "custom_dialogue",
+        });
+        await sessionTracker.flush();
+        const sessionId = await sessionTracker.ensureSession();
+        const response = await fetch(
+          `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              clientId,
+              sessionId: sessionId ?? undefined,
+              name,
+              phone: fields.phone || undefined,
+              email: fields.email || undefined,
+              message: fields.message || undefined,
+              customFields: Object.keys(customFields).length
+                ? customFields
+                : undefined,
+              intent,
+              answers: nextAnswers,
+              flowMode: "custom_dialogue",
+              whatsappDestinationId: chosen?.id,
+              source,
+            }),
+          },
+        );
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        setLeadResponse((await response.json()) as LeadResponse);
+        await sessionTracker.trackEvent({
+          type: "flow_completed",
+          flowMode: "custom_dialogue",
+        });
+      }
       setIsSubmitting(false);
       const isFormalTone = bot.flow.tone === "formal";
       const office = chosen?.label;
@@ -296,12 +327,34 @@ export function CustomDialogueChat({
 
   function selectDestination(chosen: WhatsAppDestination) {
     addMessage("user", chosen.label);
+    void sessionTracker.trackEvent({
+      type: "answer_submitted",
+      stepId: "whatsappDestination",
+      label: chosen.label,
+      value: chosen.id,
+      flowMode: "custom_dialogue",
+    });
     setDestination(chosen);
     void finishFlow(answers, chosen);
   }
 
   function advance(step: FlowStep, answer: string | string[], display: string) {
     addMessage("user", display);
+    void sessionTracker.trackEvent({
+      type: "answer_submitted",
+      stepId: step.id,
+      label: display,
+      value: answer,
+      flowMode: "custom_dialogue",
+    });
+    if (resolveStepSaveAs(step) === "name" && typeof answer === "string") {
+      void sessionTracker.trackEvent({
+        type: "name_captured",
+        stepId: step.id,
+        name: answer,
+        flowMode: "custom_dialogue",
+      });
+    }
     const nextAnswers = { ...answers, [step.id]: answer };
     setAnswers(nextAnswers);
     setTextValue("");
@@ -498,6 +551,12 @@ export function CustomDialogueChat({
                 href={leadResponse.whatsappUrl}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => {
+                  void sessionTracker.trackEvent({
+                    type: "whatsapp_clicked",
+                    flowMode: "custom_dialogue",
+                  });
+                }}
                 className="flex items-center justify-center gap-2 rounded-xl bg-[#25d366] py-3 text-sm font-semibold text-white transition hover:bg-[#1ebe5a]"
               >
                 {destination?.label
@@ -520,44 +579,6 @@ export function CustomDialogueChat({
 }
 
 type LeadFields = ReturnType<typeof extractLeadFieldsFromAnswers>;
-
-/** POSTs the lead to the backend and returns the saved handoff details. */
-async function submitLead(
-  botId: string,
-  clientId: string,
-  input: {
-    name: string;
-    fields: LeadFields;
-    customFields: Record<string, string>;
-    nextAnswers: Record<string, string | string[]>;
-    chosen: WhatsAppDestination | null;
-    source: LeadSource;
-  },
-): Promise<LeadResponse> {
-  const { name, fields, customFields, nextAnswers, chosen, source } = input;
-  const response = await fetch(
-    `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/leads`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clientId,
-        name,
-        phone: fields.phone || undefined,
-        email: fields.email || undefined,
-        message: fields.message || undefined,
-        customFields: Object.keys(customFields).length ? customFields : undefined,
-        intent: "schedule_consultation",
-        answers: nextAnswers,
-        flowMode: "custom_dialogue",
-        whatsappDestinationId: chosen?.id,
-        source,
-      }),
-    },
-  );
-  if (!response.ok) throw new Error(`API respondeu ${response.status}`);
-  return (await response.json()) as LeadResponse;
-}
 
 /**
  * Rebuilds the handoff the backend would produce, but entirely client-side, so
@@ -639,4 +660,12 @@ export function configHasCustomDialogue(dashboardConfig: unknown): boolean {
       : null;
   if (!bot?.flow || typeof bot.flow !== "object") return false;
   return hasCustomDialogue(bot.flow as Parameters<typeof hasCustomDialogue>[0]);
+}
+
+function intentForTemplate(
+  templateId: Chatbot["flow"]["templateId"],
+): "schedule_exam" | "schedule_consultation" | "severe_symptoms" {
+  if (templateId === "exam-scheduling") return "schedule_exam";
+  if (templateId === "triage") return "severe_symptoms";
+  return "schedule_consultation";
 }

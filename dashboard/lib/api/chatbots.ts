@@ -6,10 +6,10 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   (typeof window !== "undefined" ? "" : "http://localhost:4000");
 
-async function apiFetch(path: string, init?: RequestInit) {
+async function apiFetch(path: string, init?: RequestInit, apiBase = API_BASE) {
   const method = init?.method ?? "GET";
   const hasBody = init?.body !== undefined;
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase}${path}`, {
     ...init,
     headers: {
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
@@ -107,8 +107,8 @@ export async function apiUpdateChatbot(bot: Chatbot): Promise<Chatbot> {
 }
 
 /** Fetches all dashboard bots from the backend and normalizes them. */
-export async function apiListChatbots(): Promise<Chatbot[]> {
-  const data = await apiFetch("/api/chatbots");
+export async function apiListChatbots(apiBase?: string): Promise<Chatbot[]> {
+  const data = await apiFetch("/api/chatbots", undefined, apiBase ?? API_BASE);
   const list = Array.isArray(data.chatbots) ? data.chatbots : [];
   const bots: Chatbot[] = [];
   for (const item of list) {

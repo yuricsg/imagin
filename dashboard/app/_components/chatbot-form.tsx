@@ -11,6 +11,7 @@ import {
   type ChatbotInput,
 } from "@/lib/chatbots/create";
 import { CustomDialogueChat } from "@/app/chatbots/[botId]/embed/custom-dialogue-chat";
+import type { ChatSessionTracker } from "@/app/chatbots/[botId]/embed/chat-session";
 import {
   buildFlowPreview,
   BUILTIN_SAVE_AS,
@@ -36,7 +37,6 @@ import {
   type DialogueFlow,
   type FlowFieldKey,
   type FlowInputType,
-  type FlowMapsTo,
   type FlowShape,
   type FlowStep,
   type FlowStepOption,
@@ -80,6 +80,13 @@ import {
 import { LauncherPreview } from "./launcher-preview";
 
 const STATUS_ORDER: ChatbotStatus[] = ["active", "paused", "draft", "error"];
+
+/** The review preview registers nothing, so session tracking is a no-op. */
+const NOOP_SESSION_TRACKER: ChatSessionTracker = {
+  ensureSession: async () => null,
+  trackEvent: async () => {},
+  flush: async () => {},
+};
 
 const ACCENT_LABELS: Record<AccentKey, string> = {
   indigo: "Índigo",
@@ -534,13 +541,16 @@ export function ChatbotForm({
       steps: prev.steps.map((s) => {
         if (s.id !== stepId) return s;
         if (!value) {
-          const { saveAs: _s, mapsTo: _m, ...rest } = s;
+          const rest = { ...s };
+          delete rest.saveAs;
+          delete rest.mapsTo;
           return rest;
         }
         if (isBuiltinSaveAs(value)) {
           return { ...s, saveAs: value, mapsTo: value };
         }
-        const { mapsTo: _m, ...rest } = s;
+        const rest = { ...s };
+        delete rest.mapsTo;
         return { ...rest, saveAs: value };
       }),
     }));
@@ -2656,6 +2666,7 @@ function ChatPreviewDialog({
             botId={bot.id}
             clientId={bot.clientId}
             source={{}}
+            sessionTracker={NOOP_SESSION_TRACKER}
           />
         </div>
       </div>

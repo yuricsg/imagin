@@ -22,10 +22,7 @@ export function LauncherPreview({
   const lines = teaserTexts.map((t) => t.trim()).filter(Boolean);
   const texts = lines.length > 0 ? lines : [DEFAULT_LAUNCHER_TEASER];
   const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    setIndex(0);
-  }, [texts.join("\n")]);
+  const textKey = texts.join("\n");
 
   useEffect(() => {
     if (texts.length < 2) return;
@@ -38,10 +35,10 @@ export function LauncherPreview({
       setIndex((prev) => (prev + 1) % texts.length);
     }, ROTATION_MS);
     return () => window.clearInterval(id);
-  }, [texts.length, texts.join("\n")]);
+  }, [texts.length, textKey]);
 
   const src = resolveLauncherAvatarPath(avatarUrl);
-  const current = texts[index] ?? texts[0];
+  const current = texts[index % texts.length] ?? texts[0];
 
   return (
     <div className="space-y-2">
@@ -53,11 +50,7 @@ export function LauncherPreview({
           Como o visitante vê o balão
         </span>
       </div>
-      <div className="relative overflow-hidden rounded-xl border border-zinc-200/80 bg-gradient-to-br from-sky-100 via-zinc-50 to-indigo-50 px-5 py-10 dark:border-zinc-700 dark:from-zinc-900 dark:via-zinc-900 dark:to-indigo-950/40">
-        <div className="pointer-events-none absolute inset-0 opacity-40 dark:opacity-20">
-          <div className="absolute -left-8 top-4 h-24 w-40 rounded-full bg-white/70 blur-2xl dark:bg-zinc-700/40" />
-          <div className="absolute bottom-0 right-10 h-20 w-32 rounded-full bg-indigo-200/50 blur-2xl dark:bg-indigo-800/30" />
-        </div>
+      <div className="relative overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-100 px-5 py-10 dark:border-zinc-700 dark:bg-zinc-900">
         <div className="relative flex items-end justify-end gap-2.5">
           <div className="relative max-w-[min(280px,70%)] rounded-2xl bg-white px-3.5 py-3 text-left shadow-lg shadow-zinc-900/10 dark:bg-zinc-50">
             <p className="text-sm font-medium leading-snug text-zinc-900">
