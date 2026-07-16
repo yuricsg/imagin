@@ -1578,6 +1578,25 @@ export function ChatbotForm({
                         botName={name}
                         tone={flowTone}
                       />
+
+                      <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/30">
+                        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                          Testar o chatbot completo
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+                          A prévia acima é só uma amostra. Aqui você conversa com o
+                          bot exatamente como o visitante vai ver — com a saudação,
+                          o tom, as ramificações de cada opção e o encaminhamento
+                          para o WhatsApp. Nada é salvo e nenhum lead é registrado.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={openChatPreview}
+                          className="btn-brand mt-3 px-4 py-2 text-sm"
+                        >
+                          Testar conversa completa
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -2348,32 +2367,6 @@ export function ChatbotForm({
                     </div>
                     <ReviewRow label="Endereço" value={derivedId} mono />
                   </dl>
-
-                  <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/30">
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                      Testar o chatbot completo
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
-                      Converse com o bot exatamente como o visitante vai ver — com
-                      a saudação, o tom, todas as perguntas e o encaminhamento para
-                      o WhatsApp. Nada é salvo e nenhum lead é registrado.
-                    </p>
-                    {flowDialogue ? (
-                      <button
-                        type="button"
-                        onClick={openChatPreview}
-                        className="btn-brand mt-3 px-4 py-2 text-sm"
-                      >
-                        Testar conversa completa
-                      </button>
-                    ) : (
-                      <p className="mt-3 text-xs italic text-zinc-500 dark:text-zinc-400">
-                        A prévia interativa está disponível para bots com o
-                        construtor de conversa. Volte à etapa “Atendimento” para
-                        montar as perguntas.
-                      </p>
-                    )}
-                  </div>
 
                   <div className="overflow-hidden rounded-xl border border-zinc-200/70 dark:border-zinc-800/70">
                     <button
