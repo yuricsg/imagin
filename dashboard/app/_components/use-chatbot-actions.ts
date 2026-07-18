@@ -16,7 +16,10 @@ import { apiCreateChatbot, apiUpdateChatbot } from "@/lib/api/chatbots";
 
 /**
  * Shared create/update helpers for the chatbot wizard (home + dedicated pages).
- * Keeps localStorage optimistic updates and API persistence in one place.
+ * The database is the source of truth: create/update await the API and throw on
+ * failure so the wizard can surface it — nothing is persisted to localStorage.
+ * localStorage is read only to recover legacy bots that never reached the DB
+ * (see `migrateLocalBots`).
  */
 export function useChatbotActions(serverBots: Chatbot[] = []) {
   const createdBots = useSyncExternalStore(
@@ -36,6 +39,7 @@ export function useChatbotActions(serverBots: Chatbot[] = []) {
 
   const bots = useMemo(() => {
     const visibleServer = serverBots.map((b) => clientUpdates.get(b.id) ?? b);
+    // Legacy localStorage bots still awaiting migration to the DB.
     const visibleLocal = createdBots
       .filter((b) => !serverBotIds.has(b.id))
       .map((b) => clientUpdates.get(b.id) ?? b);
@@ -46,34 +50,24 @@ export function useChatbotActions(serverBots: Chatbot[] = []) {
     async (input: ChatbotInput): Promise<Chatbot> => {
       const existingIds = new Set(bots.map((bot) => bot.id));
       const bot = buildChatbot(input, existingIds, Date.now());
-      saveCreatedBots([...createdBots, bot]);
-      // Await persistence so the wizard can show its saving state; API
-      // failures keep the optimistic local bot (previous semantics).
-      await apiCreateChatbot(bot).catch((err) =>
-        console.warn("Failed to save bot to API:", err),
-      );
-      return bot;
+      // Persist to the DB and surface failures — the bot only exists if saved.
+      // apiCreateChatbot retries to ride out a cold backend before giving up.
+      const saved = await apiCreateChatbot(bot);
+      return saved;
     },
-    [bots, createdBots],
+    [bots],
   );
 
   const update = useCallback(
     async (base: Chatbot, input: ChatbotInput): Promise<Chatbot> => {
       const normalized = normalizeStoredChatbot(base) ?? base;
       const updated = updateChatbot(normalized, input);
-      const existsLocally = createdBots.some((bot) => bot.id === updated.id);
-      saveCreatedBots(
-        existsLocally
-          ? createdBots.map((bot) => (bot.id === updated.id ? updated : bot))
-          : [...createdBots, updated],
-      );
-      setClientUpdates((prev) => new Map(prev).set(updated.id, updated));
-      await apiUpdateChatbot(updated).catch((err) =>
-        console.warn("Failed to update bot in API:", err),
-      );
-      return updated;
+      const saved = await apiUpdateChatbot(updated);
+      // Optimistic in-memory override until the next server fetch.
+      setClientUpdates((prev) => new Map(prev).set(saved.id, saved));
+      return saved;
     },
-    [createdBots],
+    [],
   );
 
   const findBot = useCallback(
@@ -88,4 +82,34 @@ export function useChatbotActions(serverBots: Chatbot[] = []) {
   );
 
   return { bots, createdBots, create, update, findBot, clientUpdates };
+}
+
+/**
+ * One-time recovery of bots that live only in localStorage because their
+ * original DB write failed (e.g. the backend was cold). Pushes each orphan not
+ * already on the server to the DB and, on success, drops it from localStorage.
+ * Returns the number of bots migrated so the caller can refresh the server data.
+ */
+export async function migrateLocalBots(
+  serverBotIds: ReadonlySet<string>,
+): Promise<number> {
+  const local = getCreatedBots();
+  const orphans = local.filter((bot) => !serverBotIds.has(bot.id));
+  if (orphans.length === 0) return 0;
+
+  const migratedIds = new Set<string>();
+  for (const bot of orphans) {
+    try {
+      await apiCreateChatbot(bot);
+      migratedIds.add(bot.id);
+    } catch (err) {
+      // Leave it in localStorage to retry on the next load.
+      console.warn(`Falha ao migrar bot ${bot.id} para o banco:`, err);
+    }
+  }
+
+  if (migratedIds.size > 0) {
+    saveCreatedBots(getCreatedBots().filter((bot) => !migratedIds.has(bot.id)));
+  }
+  return migratedIds.size;
 }

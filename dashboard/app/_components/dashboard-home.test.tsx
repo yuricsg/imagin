@@ -18,8 +18,17 @@ vi.mock("next/navigation", () => ({
     replace: vi.fn(),
     back: vi.fn(),
     prefetch: vi.fn(),
+    refresh: vi.fn(),
   }),
   usePathname: () => "/",
+}));
+
+// Keep the localStorage-migration effect off the network: a rejecting create
+// leaves seeded local bots in place, so these tests still treat them as
+// dashboard bots. Migration itself is covered in use-chatbot-actions.test.ts.
+vi.mock("@/lib/api/chatbots", () => ({
+  apiCreateChatbot: vi.fn().mockRejectedValue(new Error("offline in tests")),
+  apiDeleteChatbot: vi.fn().mockResolvedValue(true),
 }));
 
 function makeData(overrides: Partial<DashboardData> = {}): DashboardData {

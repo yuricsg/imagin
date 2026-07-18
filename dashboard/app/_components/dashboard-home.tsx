@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Chatbot, Client, Lead, LeadStatus } from "@/lib/chatbots/types";
 import type { DashboardData } from "@/lib/dashboard";
 import { ACCENTS } from "@/lib/chatbots/accents";
@@ -21,6 +21,7 @@ import {
   normalizeStoredChatbot,
 } from "@/lib/chatbots/create";
 import { apiDeleteChatbot } from "@/lib/api/chatbots";
+import { migrateLocalBots } from "./use-chatbot-actions";
 import { chatbotDisplayName } from "@/lib/chatbots/display";
 import { embedSnippet } from "@/lib/format";
 import { MetricsRow } from "./metrics-row";
@@ -58,6 +59,18 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     dbBotIds,
     nowMs,
   } = data;
+
+  // Recover any bot still stranded in localStorage (its original DB write
+  // failed) by pushing it to the DB, then refresh so it loads from the server.
+  const migrationRan = useRef(false);
+  useEffect(() => {
+    if (migrationRan.current) return;
+    migrationRan.current = true;
+    const serverIds = new Set(serverBots.map((b) => b.id));
+    void migrateLocalBots(serverIds).then((migrated) => {
+      if (migrated > 0) router.refresh();
+    });
+  }, [serverBots, router]);
 
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [search, setSearch] = useState("");

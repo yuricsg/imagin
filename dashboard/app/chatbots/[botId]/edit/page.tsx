@@ -76,7 +76,10 @@ export default function EditChatbotPage({
     <ChatbotForm
       key={initialBot.id}
       initialBot={initialBot}
-      onClose={() => router.push("/")}
+      onClose={() => {
+        router.push("/");
+        router.refresh();
+      }}
       onCreate={() => {
         throw new Error("onCreate should not run in edit mode");
       }}

@@ -211,6 +211,7 @@ export function ChatbotForm({
   const [step, setStep] = useState(0);
   const [createdBot, setCreatedBot] = useState<Chatbot | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [copied, setCopied] = useState(false);
 
   const [name, setName] = useState(seed?.name ?? "");
@@ -834,11 +835,20 @@ export function ChatbotForm({
       return;
     }
     setSaving(true);
+    setSaveError("");
     try {
       const bot = await (isEditing && onUpdate
         ? onUpdate(currentInput())
         : onCreate(currentInput()));
       setCreatedBot(bot);
+    } catch {
+      // The bot is only real once the DB confirms — keep the wizard open so the
+      // operator can retry (the API already retried a cold backend).
+      setSaveError(
+        isEditing
+          ? "Não foi possível salvar as alterações. Verifique a conexão e tente de novo."
+          : "Não foi possível salvar o chatbot no servidor. Verifique a conexão e tente de novo.",
+      );
     } finally {
       setSaving(false);
     }
@@ -2614,6 +2624,15 @@ export function ChatbotForm({
                   className="rounded-lg border border-rose-200/80 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300"
                 >
                   Corrija os campos destacados antes de continuar.
+                </p>
+              ) : null}
+
+              {saveError ? (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-rose-200/80 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300"
+                >
+                  {saveError}
                 </p>
               ) : null}
             </div>

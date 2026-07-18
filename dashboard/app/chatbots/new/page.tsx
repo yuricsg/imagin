@@ -85,11 +85,12 @@ export default function NewChatbotPage({
     <ChatbotForm
       key={duplicateFrom ? `from-${duplicateFrom.id}` : "new"}
       duplicateFrom={duplicateFrom ?? undefined}
-      onClose={() => router.push("/")}
-      onCreate={(input) => {
-        const bot = create(input);
-        return bot;
+      onClose={() => {
+        // Re-fetch the server data so the freshly persisted bot shows up.
+        router.push("/");
+        router.refresh();
       }}
+      onCreate={create}
     />
   );
 }
