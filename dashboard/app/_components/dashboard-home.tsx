@@ -37,6 +37,7 @@ import { EmptyState } from "./ui";
 import {
   IconAlert,
   IconBot,
+  IconChartBar,
   IconCopy,
   IconDownload,
   IconInbox,
@@ -522,7 +523,30 @@ export function DashboardHome({ data }: { data: DashboardData }) {
           />
 
           {selectedBot ? (
-            <EmbedBlock bot={selectedBot} />
+            <>
+              <Link
+                href={`/chatbots/${selectedBot.id}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-teal-200/80 bg-teal-50/60 px-4 py-3 transition-colors hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 dark:border-teal-900/50 dark:bg-teal-950/30 dark:hover:bg-teal-950/50"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white">
+                    <IconChartBar className="size-4.5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                      Ver métricas completas
+                    </span>
+                    <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                      Desempenho por canal de {selectedBot.name}
+                    </span>
+                  </span>
+                </span>
+                <span aria-hidden className="shrink-0 text-teal-700 dark:text-teal-300">
+                  →
+                </span>
+              </Link>
+              <EmbedBlock bot={selectedBot} />
+            </>
           ) : (
             <div className="rounded-xl border border-dashed border-zinc-300/80 bg-white p-5 dark:border-zinc-700/80 dark:bg-zinc-900/60">
               <EmptyState

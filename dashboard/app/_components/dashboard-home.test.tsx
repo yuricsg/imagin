@@ -583,6 +583,25 @@ describe("DashboardHome — funil real", () => {
     expect(within(accessesCard as HTMLElement).getByText("2")).toBeInTheDocument();
   });
 
+  it("reveals a link to the bot metrics page once a bot is selected", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome data={funnelData()} />);
+
+    // No selection yet — the metrics link is not offered.
+    expect(
+      screen.queryByRole("link", { name: /Ver métricas completas/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: `${firstBot.name}, ${firstBot.clientName}`,
+      }),
+    );
+
+    const link = screen.getByRole("link", { name: /Ver métricas completas/ });
+    expect(link).toHaveAttribute("href", `/chatbots/${firstBot.id}`);
+  });
+
   it("filters metrics and leads with calendar start and end dates", () => {
     render(<DashboardHome data={funnelData()} />);
     fireEvent.change(screen.getByLabelText("Data inicial"), {
