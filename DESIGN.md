@@ -8,8 +8,8 @@ colors:
   ink-muted: "#71717a"
   ink-subtle: "#a1a1aa"
   border: "#e4e4e7"
-  primary: "#6366f1"
-  primary-deep: "#4f46e5"
+  primary: "#0d9488"
+  primary-deep: "#0f766e"
   accent-violet: "#7c3aed"
   accent-indigo-soft: "#e0e7ff"
   status-online: "#10b981"
@@ -82,7 +82,7 @@ components:
 
 ## Overview
 
-**The Operations Console** — a restrained product UI for agency operators managing capture chatbots and leads. Geist sans for all UI text; Geist Mono for embed URLs and technical snippets. Ambient indigo/violet radial wash on the page background (fixed, subtle). Surfaces use white/zinc at ~80% opacity with backdrop blur and hairline borders (`border-zinc-200/70`). Dark mode follows OS `prefers-color-scheme`.
+**The Operations Console** — a restrained product UI for agency operators managing capture chatbots and leads. Geist sans for all UI text; Geist Mono for embed URLs and technical snippets. The brand color is the **Imagin teal** sampled from the agency logo (`imagin-logo.png`): ambient teal radial wash on the page background (fixed, subtle). Surfaces are solid white panels (`bg-white`, dark `zinc-900/70`) with hairline borders (`border-zinc-200/80`); backdrop blur is reserved for the sticky header, sticky form footers, and modal scrims — never for static panels. Dark mode follows OS `prefers-color-scheme`.
 
 Mood: calm, dense, trustworthy. Not a marketing site.
 
@@ -90,15 +90,17 @@ Mood: calm, dense, trustworthy. Not a marketing site.
 
 | Role | Light | Usage |
 |------|-------|--------|
-| Surface | `zinc-50` body, `white/80` panels | Page and cards |
+| Surface | `zinc-50` body, `white` panels (dark `zinc-900/70`) | Page and cards |
 | Ink | `zinc-900` headings, `zinc-700` body | Primary text |
 | Muted | `zinc-500`–`zinc-400` | Secondary labels, hints |
-| Primary | `indigo-500` → `violet-600` gradient | Primary actions, brand mark |
-| Accent palette | indigo, violet, sky, emerald, amber, rose | Per-chatbot identity (`lib/chatbots/accents.ts`) |
+| Primary | **Imagin teal** `teal-600` (#0d9488, hover `teal-700` #0f766e) | Primary actions, selection, focus rings — solid, never gradient |
+| Accent palette | indigo, violet, sky, emerald, amber, rose | Per-chatbot identity (`lib/chatbots/accents.ts`) — solid/tonal fills |
 | Site launcher | white bubble, ink text, indigo-soft avatar fallback, emerald online dot | Embed widget on client sites (`public/embed/widget.js`) |
 | Error | `rose-500` border, `rose-600` text | Validation |
 
-Accent color is for identity dots, selected rows, and primary CTAs — not decorative fills on inactive UI.
+**Teal is brand/action, not status.** Teal marks interactive affordances (CTAs, selected states, focus rings, brand tiles). Status positive (online dot, converted badge, success banners) stays `emerald/green`; validation stays `rose`. Never use teal for status semantics and never emerald for primary actions — the two greens must not collide.
+
+Accent color is for identity dots, selected rows, and primary CTAs — not decorative fills on inactive UI. The violet of the logo glyph survives only inside the per-bot accent palette; chrome never uses indigo/violet.
 
 ## Typography
 
@@ -109,20 +111,72 @@ Accent color is for identity dots, selected rows, and primary CTAs — not decor
 
 ## Elevation
 
-Flat-to-layered: tonal surfaces + `border-zinc-200/70` + optional `shadow-sm` on primary buttons. Selected chatbot rows use accent-tinted surface + colored glow (`ACCENTS[].glow`). Dialogs: `shadow-2xl`, `backdrop-blur-xl`, scrim `zinc-950/40`.
+Flat-to-layered: solid tonal surfaces + `border-zinc-200/80` + optional `shadow-sm` on primary buttons. Selected chatbot rows use accent-tinted surface + colored glow (`ACCENTS[].glow`). Dialogs: `shadow-2xl`, scrim `zinc-950/40` with `backdrop-blur-sm`. Sticky chrome (header, wizard footers) keeps a light `backdrop-blur-sm` over `white/95`.
 
 No heavy drop shadows on static panels.
 
 ## Components
 
-- **Primary button**: `rounded-lg bg-linear-to-r from-indigo-500 to-violet-600`, white semibold text, `shadow-sm shadow-indigo-500/30`, hover deepens gradient, disabled at 50% opacity.
+- **Primary button**: `rounded-lg bg-teal-600` sólido, white semibold text, `shadow-sm shadow-teal-600/30`, hover `bg-teal-700`, disabled at 50% opacity. Nunca gradiente.
 - **Secondary button**: zinc text, hover `bg-zinc-100` (dark: `bg-zinc-800`).
-- **Input / select**: `rounded-lg border border-zinc-200 bg-white/70 px-3 py-2 text-sm`, focus `ring-2 ring-indigo-500/25`, error state rose border/ring.
+- **Input / select**: `rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm`, focus `ring-2 ring-teal-500/25`, error state rose border/ring.
 - **Badge**: `rounded-full px-2 py-0.5 text-xs ring-1 ring-inset`.
 - **Avatar**: `rounded-lg` initials chip with accent gradient fill.
 - **Empty state**: centered icon in zinc gradient tile + title + description.
 - **Modal**: bottom sheet on mobile (`rounded-t-2xl`), centered dialog on `sm+` (`max-w-lg`, `rounded-2xl`).
 - **Site launcher** (`public/embed/widget.js`): speech bubble + circular avatar + online status; Arial stack (host-site isolation); `rounded.dialog` bubble, `rounded.full` avatar; colors from `components.site-launcher`.
+
+## Motion
+
+Motion is a token system, never ad-hoc. All keyframes/classes live in `app/globals.css` (prefix `imagin-` / `.motion-*`); never hand-write per-component keyframes.
+
+**Tokens** (`:root` in `globals.css`)
+
+| Token | Value | Uso |
+|-------|-------|-----|
+| `--motion-ease-out` | `cubic-bezier(0.2, 0.7, 0.3, 1)` | Easing padrão de entradas |
+| `--motion-duration-fast` | `150ms` | Hover/press feedback |
+| `--motion-duration-enter` | `180ms` | Entradas (fade + subida 5px) |
+| `--motion-duration-shimmer` | `1.5s` | Varredura do skeleton |
+| `--motion-stagger-step` | `35ms` | Intervalo entre itens de lista |
+
+**Padrões**
+
+- **Skeleton shimmer** (`.motion-skeleton`): blocos zinc com varredura de 1.5s. Use o componente `Skeleton` (`_components/ui.tsx`) e os espelhos `MetricsRowSkeleton` / `LeadsTableSkeleton` / `ChatbotListSkeleton`. Como os dados chegam 100% via servidor, os skeletons granulares são consumidos por `app/loading.tsx` — nunca um spinner solto para loading de conteúdo.
+- **Entradas** (`.motion-enter`): fade + subida de 5px em 180ms, `both`. Listas somam `style={{ animationDelay }}` com stagger de 35ms e cap de ~10 itens (`Math.min(index, 9) * 35`).
+- **Replay de stagger**: só em filtros discretos (bot, cliente, status, datas) via `key={filterSignature}` na tabela. A busca por texto fica fora da assinatura para não re-animar a cada tecla.
+- **Hover lift** (`.motion-lift`): `translateY(-1px)` + sombra sutil, só em cards e linhas clicáveis. Não aplicar em `<tr>` de tabela com `border-collapse` (transform/sombra quebram o colapso de bordas) — linhas de tabela usam apenas enter + stagger.
+- **Press** (`.motion-press`): `:active { scale(.98) }` em botões e itens clicáveis.
+- **Pulse de atividade** (`.motion-pulse`): anel azul suave em 2.4s, reservado a badges de atividade nova ("N novos").
+- **Spinner inline** (`IconSpinner` + `animate-spin`): somente dentro de botão de ação async (ex.: "Salvando…" no wizard), nunca solto na página. Sucesso = o check da tela de sucesso.
+- **Contadores de métricas**: valor com `key={value}` + `.motion-enter` — troca de filtro re-anima o número suavemente.
+- **`prefers-reduced-motion`**: media query global em `globals.css` zera todas as animations/transitions (0.01ms) — o conteúdo sempre aparece completo e instantâneo.
+- **RobotLoader** (`_components/robot-loader.tsx`, herói do `app/loading.tsx`): mascote com bob+tilt (`imagin-robot-bob` 1.8s), barra indeterminada teal (`imagin-progress-slide`, fill 40% deslizante, `role="progressbar"` sem valor), reticências pulsantes e 4 frases rotativas em loop de 10s (CSS puro, delays 0/2.5/5/7.5s). Server component, zero JS. Em reduced-motion: robô estático, barra fixa em 60%, frase única "Carregando…".
+
+## Comandos e atalhos
+
+Console de operador usa teclado de primeira classe (estilo Linear).
+
+- **Command palette** (`_components/command-palette.tsx`): overlay `role="dialog"` com input `role="combobox"` + lista `role="listbox"`, `aria-activedescendant`, ↑/↓/Enter/Esc, backdrop fecha, foco devolvido ao gatilho. Abre com **⌘K / Ctrl+K** (funciona mesmo dentro de inputs) ou pelo botão "⌘K" no header (evento `imagin:toggle-command-palette`; fora da home o botão vira link para "/"). O hint do atalho é por plataforma (`use-modifier-key.ts`): "⌘K" no SSR e em Apple, "Ctrl+K" em Windows/Linux após o mount — aplicado no `<kbd>`/title do botão e no footer da palette, sem hydration mismatch. Ações: criar chatbot, abrir cada bot, duplicar qualquer bot (inclusive o demo; Editar segue restrito a editáveis), copiar snippet do bot selecionado (com aviso "Copiado!"), alternar tema, "Somente novos", exportar CSV.
+- **Atalhos globais da home**: `/` foca a busca de leads; `n` abre `/chatbots/new`; `Esc` fecha palette/modais. Teclas soltas nunca disparam com foco em input/textarea/select/contenteditable.
+- **Quick actions de lead** (desktop, reveladas em hover/focus-within da linha): copiar mensagem do WhatsApp (feedback "Copiado") e abrir conversa no WhatsApp. No mobile o card segue alvo único; o modal de detalhes oferece o link "Abrir conversa no WhatsApp".
+- **Chip "Somente novos"** na toolbar: `aria-pressed`, contador ao vivo, combina com os demais filtros.
+- **Menu de ações do chatbot** (kebab "⋯", visível em todo bot): padrão WAI-ARIA menu button — abre com clique/Enter/Espaço/↓, ↑↓ movem foco real, Esc fecha e devolve foco ao gatilho, clique fora fecha, um menu aberto por vez. Todo bot tem **Duplicar**; **Editar** e **Excluir** só aparecem em bots editáveis (o demo mostra apenas "Duplicar", sem separador). Excluir é rose, com diálogo de confirmação. Dropdown entra com `.motion-menu` (fade + subida 4px, 150ms). Ações nunca ficam escondidas atrás de hover.
+- **Comandos fixados** (pin na palette): cada linha tem um botão de pin (`IconPin`) revelado no hover/focus-within da linha e sempre visível quando fixado (teal, `fill-current`); clicar fixa/desafixa sem executar o comando (`stopPropagation`), com `aria-pressed` + `aria-label` por comando. Persistência em `localStorage["imagin:pinned-commands"]` (array de ids, na ordem em que foram fixados) via `use-pinned-commands.ts` — external store no mesmo padrão de `createdBots` (SSR vê vazio, sem hydration mismatch nem setState-em-effect). Ordenação: com busca vazia, os fixados abrem a lista sob o header **"Fixados"** (na ordem do pin, sem repetir no grupo original); com busca, matches fixados vêm antes dos demais, sem seção separada. Id sem comando correspondente (ex.: bot excluído) simplesmente não renderiza.
+
+## Responsividade mobile
+
+Breakpoint principal: `sm` (640px); a tabela de leads vira cards abaixo de `md` (768px).
+
+- **Leads**: `< md` usa cards empilhados (alvo de toque único por lead — nome, bot, badges, assunto, tempo relativo); `≥ md` mantém a tabela com `overflow-x-auto` (min-width 680px) e quick actions em hover/focus.
+- **Toolbar de leads**: busca, selects e datas empilham em coluna única com largura total; chip "Somente novos" e botões (Limpar/Exportar) alinhados à esquerda/direita conforme o espaço.
+- **Touch targets ≥ 44px** nos controles principais em `< sm` (`max-sm:min-h-11` / `max-sm:py-3` / `size-11`): busca, selects, datas, chips, botões de ação, menu "⋯", itens de menu, pin da palette, fechar modal, copiar embed e navegação do wizard. Controles secundários (theme toggle, avatar) podem ficar menores para não estourar o header em ~360px.
+- **Header**: logo encolhe via `max-w` + `min-w-0`; o botão Comandos vira ícone-only 44×44 (texto e `<kbd>` só em `≥ sm`); chip "Agência" escondido em `< sm`.
+- **Palette**: `mt-4`/`pb-4` (vs `12vh` no desktop), lista com `max-h-[55dvh]` para não quebrar com o teclado virtual; linhas com ~48px de altura.
+- **Modais**: `LeadDetailsModal` e diálogos abrem como bottom-sheet (`items-end`, `rounded-t-2xl`, `max-h-[92dvh]`) com scroll interno; CTA de WhatsApp full-width em `< sm`; diálogo de exclusão empilha botões (Excluir em cima).
+- **Métricas**: grid 2 colunas em `< lg` com `p-4` e números `text-2xl` (nunca truncam); 4 colunas em `≥ lg`.
+- **Wizard** (`/chatbots/new`): stepper vertical só em `≥ lg`; em telas menores, barra de progresso horizontal ("Etapa N de 5") + footer sticky com Voltar/Continuar sempre visíveis.
+- Motion: nenhuma animação nova depende de breakpoint; o blanket `prefers-reduced-motion` do `globals.css` cobre tudo.
 
 ## Do's and Don'ts
 

@@ -28,6 +28,12 @@ export interface ChatbotWhatsAppConfig {
   routingQuestion: string;
   /** Pre-filled message; placeholders: {bot}, {nome}, {telefone}, {email}, {mensagem}, {unidade}, + custom saveAs keys. */
   messageTemplate: string;
+  /**
+   * Last chat bubble before the WhatsApp button (e.g. "Clique no botão para
+   * enviar a mensagem para a secretária."). Optional — empty falls back to
+   * the tone default. Operator text is never rewritten by tone changes.
+   */
+  closingMessage?: string;
 }
 
 export type WhatsAppVariable = {
@@ -46,6 +52,18 @@ Assunto: {mensagem}`;
 
 export const DEFAULT_WHATSAPP_ROUTING_QUESTION =
   "Para qual unidade você prefere ser atendido?";
+
+/**
+ * Default closing bubble per tone, shown when the bot has no custom
+ * `closingMessage` (single-number bots; routed bots mention the office).
+ */
+export const DEFAULT_WHATSAPP_CLOSING_MESSAGES: Record<
+  "friendly" | "formal",
+  string
+> = {
+  friendly: "Continue no WhatsApp para falar com nossa equipe.",
+  formal: "Continue o atendimento pelo WhatsApp para confirmar os detalhes.",
+};
 
 export const EMPTY_WHATSAPP: ChatbotWhatsAppConfig = {
   enabled: false,
@@ -232,14 +250,16 @@ export function buildWhatsAppFromInput(input: {
   whatsappDestinations: WhatsAppDestination[];
   whatsappRoutingQuestion: string;
   whatsappMessageTemplate: string;
+  whatsappClosingMessage: string;
 }): ChatbotWhatsAppConfig {
   const messageTemplate =
     input.whatsappMessageTemplate.trim() || DEFAULT_WHATSAPP_MESSAGE_TEMPLATE;
   const routingQuestion =
     input.whatsappRoutingQuestion.trim() || DEFAULT_WHATSAPP_ROUTING_QUESTION;
+  const closingMessage = input.whatsappClosingMessage.trim() || undefined;
 
   if (!input.whatsappEnabled) {
-    return { ...EMPTY_WHATSAPP, routingQuestion, messageTemplate };
+    return { ...EMPTY_WHATSAPP, routingQuestion, messageTemplate, closingMessage };
   }
 
   const destinations = normalizeWhatsAppDestinations(input.whatsappDestinations);
@@ -249,6 +269,7 @@ export function buildWhatsAppFromInput(input: {
     destinations,
     routingQuestion,
     messageTemplate,
+    closingMessage,
   };
 }
 

@@ -1,5 +1,6 @@
 import type { Chatbot } from "./types";
 import { defaultFlowForTemplate } from "./flows";
+import { DEFAULT_EMBED } from "./create";
 import { DEFAULT_WHATSAPP_MESSAGE_TEMPLATE, EMPTY_WHATSAPP } from "./whatsapp";
 
 const flowDefaults = defaultFlowForTemplate("patient-capture");
@@ -29,11 +30,7 @@ export const renataReis: Chatbot = {
     ...EMPTY_WHATSAPP,
     messageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   },
-  embed: {
-    apiBaseUrl: "https://api.imagin.app",
-    appBaseUrl: "https://app.imagin.app",
-    scriptPath: "/embed/widget.js",
-  },
+  embed: { ...DEFAULT_EMBED },
   launcher: {
     teaserTexts: [
       "Consultas e exames em um só lugar! Agende agora!",

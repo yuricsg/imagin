@@ -84,3 +84,11 @@ export function useTheme() {
   if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
   return ctx;
 }
+
+/**
+ * Same as useTheme but returns null outside the provider — for components
+ * (e.g. the command palette) that also render in provider-less test trees.
+ */
+export function useThemeOptional() {
+  return useContext(ThemeContext);
+}

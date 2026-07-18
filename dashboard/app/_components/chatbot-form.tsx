@@ -8,6 +8,7 @@ import {
   buildChatbot,
   DEFAULT_EMBED,
   chatbotToInput,
+  duplicateChatbotInput,
   type ChatbotInput,
 } from "@/lib/chatbots/create";
 import { CustomDialogueChat } from "@/app/chatbots/[botId]/embed/custom-dialogue-chat";
@@ -16,6 +17,7 @@ import {
   buildFlowPreview,
   BUILTIN_SAVE_AS,
   createFlowId,
+  FLOW_END_NO_WHATSAPP,
   FLOW_FIELD_LABELS,
   FLOW_INPUT_TYPE_LABELS,
   FLOW_MAPS_TO_LABELS,
@@ -50,6 +52,7 @@ import {
   type ChatbotFieldErrors,
 } from "@/lib/chatbots/validate";
 import {
+  DEFAULT_WHATSAPP_CLOSING_MESSAGES,
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   DEFAULT_WHATSAPP_ROUTING_QUESTION,
   emptyDestination,
@@ -75,6 +78,7 @@ import {
   IconCheck,
   IconCopy,
   IconExternal,
+  IconSpinner,
   IconX,
 } from "./icons";
 import { LauncherPreview } from "./launcher-preview";
@@ -181,24 +185,36 @@ export function ChatbotForm({
   onClose,
   onCreate,
   initialBot,
+  duplicateFrom,
   onUpdate,
 }: {
   onClose: () => void;
-  /** Builds and persists the bot; returns it so the success screen can show the embed code. */
-  onCreate: (input: ChatbotInput) => Chatbot;
+  /** Builds and persists the bot; returns it (or a promise of it) so the success screen can show the embed code. */
+  onCreate: (input: ChatbotInput) => Chatbot | Promise<Chatbot>;
   /** When set, the form opens in edit mode with fields pre-filled. */
   initialBot?: Chatbot;
-  /** Persists edits; keeps the bot id unchanged. */
-  onUpdate?: (input: ChatbotInput) => Chatbot;
+  /**
+   * Source bot to duplicate: creation mode with every field pre-filled
+   * (names get a " (cópia)" suffix). Submit still runs `onCreate`.
+   */
+  duplicateFrom?: Chatbot;
+  /** Persists edits; keeps the bot id unchanged. May return a promise while saving. */
+  onUpdate?: (input: ChatbotInput) => Chatbot | Promise<Chatbot>;
 }) {
   const isEditing = Boolean(initialBot);
-  const seed = initialBot ? chatbotToInput(initialBot) : null;
+  const seed = initialBot
+    ? chatbotToInput(initialBot)
+    : duplicateFrom
+      ? duplicateChatbotInput(duplicateFrom)
+      : null;
 
   const [step, setStep] = useState(0);
   const [createdBot, setCreatedBot] = useState<Chatbot | null>(null);
+  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const [name, setName] = useState(seed?.name ?? "");
+  const [flowName, setFlowName] = useState(seed?.flowName ?? "");
   const [clientName, setClientName] = useState(seed?.clientName ?? "");
   const [specialty, setSpecialty] = useState(seed?.specialty ?? "");
   const [status, setStatus] = useState<ChatbotStatus>(seed?.status ?? "active");
@@ -244,7 +260,9 @@ export function ChatbotForm({
         return structuredClone(seed.flowDialogue);
       }
       if (initialBot) return undefined;
-      return seedDialogueFromTemplate("patient-capture");
+      // Plain creation starts from the default template; duplicating a legacy
+      // bot without dialogue seeds one from the source bot's template.
+      return seedDialogueFromTemplate(seed?.flowTemplateId ?? "patient-capture");
     },
   );
   const isDialogueMode = flowDialogue !== undefined;
@@ -273,6 +291,9 @@ export function ChatbotForm({
   );
   const [whatsappMessageTemplate, setWhatsappMessageTemplate] = useState(
     seed?.whatsappMessageTemplate ?? DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  );
+  const [whatsappClosingMessage, setWhatsappClosingMessage] = useState(
+    seed?.whatsappClosingMessage ?? "",
   );
   const [launcherTeaserTexts, setLauncherTeaserTexts] = useState<string[]>(
     () =>
@@ -352,6 +373,7 @@ export function ChatbotForm({
   function currentInput(): ChatbotInput {
     return {
       name,
+      flowName,
       clientName,
       specialty,
       status,
@@ -375,6 +397,7 @@ export function ChatbotForm({
       whatsappDestinations,
       whatsappRoutingQuestion,
       whatsappMessageTemplate,
+      whatsappClosingMessage,
       launcherTeaserTexts,
       launcherAvatarUrl,
       apiBaseUrl,
@@ -788,8 +811,9 @@ export function ChatbotForm({
     });
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (saving) return;
     const errors = stepErrors(step);
     if (errors) {
       setFieldErrors(errors);
@@ -809,10 +833,14 @@ export function ChatbotForm({
       goToStep(step + 1);
       return;
     }
-    if (isEditing && onUpdate) {
-      setCreatedBot(onUpdate(currentInput()));
-    } else {
-      setCreatedBot(onCreate(currentInput()));
+    setSaving(true);
+    try {
+      const bot = await (isEditing && onUpdate
+        ? onUpdate(currentInput())
+        : onCreate(currentInput()));
+      setCreatedBot(bot);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -848,7 +876,7 @@ export function ChatbotForm({
           }
         : undefined,
     },
-    { botName: name, clientName },
+    { botName: name, clientName, closingMessage: whatsappClosingMessage },
   );
 
   return (
@@ -863,7 +891,7 @@ export function ChatbotForm({
           <button
             type="button"
             onClick={onClose}
-            className="mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:text-zinc-400 dark:hover:text-zinc-200"
+            className="mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:text-zinc-400 dark:hover:text-zinc-200"
           >
             <IconArrowLeft className="size-3.5" />
             Voltar ao painel
@@ -894,7 +922,7 @@ export function ChatbotForm({
       </div>
 
       {createdBot ? (
-        <div className="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white/80 shadow-sm backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/55">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-800/80 dark:bg-zinc-900/70">
           <SuccessScreen
             bot={createdBot}
             copied={copied}
@@ -904,7 +932,7 @@ export function ChatbotForm({
           />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white/80 shadow-sm backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/55">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-800/80 dark:bg-zinc-900/70">
           <div className="grid lg:grid-cols-[minmax(11.5rem,13rem)_minmax(0,1fr)]">
             {/* Desktop vertical stepper */}
             <nav
@@ -926,9 +954,9 @@ export function ChatbotForm({
                         aria-current={isCurrent ? "step" : undefined}
                         aria-label={s.title}
                         title={s.title}
-                        className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                        className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                           isCurrent
-                            ? "bg-indigo-50 text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-100"
+                            ? "bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100"
                             : isDone
                               ? "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800/80"
                               : "cursor-default text-zinc-400 dark:text-zinc-500"
@@ -937,7 +965,7 @@ export function ChatbotForm({
                         <span
                           className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
                             isDone || isCurrent
-                              ? "bg-indigo-500 text-white dark:bg-indigo-400 dark:text-indigo-950"
+                              ? "bg-teal-600 text-white dark:bg-teal-400 dark:text-teal-950"
                               : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
                           }`}
                         >
@@ -983,7 +1011,7 @@ export function ChatbotForm({
                           aria-label={`${s.title}${isDone ? ", concluída" : isCurrent ? ", atual" : ""}`}
                           className={`block h-1.5 rounded-full transition-colors ${
                             isDone || isCurrent
-                              ? "bg-indigo-500 dark:bg-indigo-400"
+                              ? "bg-teal-500 dark:bg-teal-400"
                               : "bg-zinc-200 dark:bg-zinc-800"
                           }`}
                         />
@@ -1035,6 +1063,29 @@ export function ChatbotForm({
                             }
                             className={inputClass(Boolean(fieldErrors.name))}
                           />
+                        </Field>
+
+                        <Field
+                          label="Nome do fluxo"
+                          htmlFor={`${formId}-flow-name`}
+                          className="sm:col-span-2"
+                        >
+                          <input
+                            id={`${formId}-flow-name`}
+                            value={flowName}
+                            onChange={(e) => setFlowName(e.target.value)}
+                            placeholder="Ex.: Fluxo de exames — landing page"
+                            aria-describedby={`${formId}-flow-name-hint`}
+                            className={inputClass(false)}
+                          />
+                          <p
+                            id={`${formId}-flow-name-hint`}
+                            className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
+                          >
+                            Opcional. Aparece na lista do painel para você
+                            identificar o fluxo. O nome do chatbot aparece para
+                            o visitante dentro do chat.
+                          </p>
                         </Field>
 
                         <Field
@@ -1130,9 +1181,9 @@ export function ChatbotForm({
                                   syncFlowFromSpecialty(suggestion);
                                 }}
                                 aria-pressed={selected}
-                                className={`rounded-lg border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                                className={`rounded-lg border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                                   selected
-                                    ? "border-indigo-400 bg-indigo-50 font-medium text-indigo-800 dark:border-indigo-500 dark:bg-indigo-950/40 dark:text-indigo-200"
+                                    ? "border-teal-400 bg-teal-50 font-medium text-teal-800 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200"
                                     : "border-zinc-200 bg-zinc-50/80 text-zinc-700 hover:border-zinc-300 hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/60"
                                 }`}
                               >
@@ -1165,9 +1216,9 @@ export function ChatbotForm({
                             type="button"
                             onClick={() => selectFlowTemplate(id)}
                             aria-pressed={selected}
-                            className={`rounded-xl border px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                            className={`rounded-xl border px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                               selected
-                                ? "border-indigo-400 bg-indigo-50/80 dark:border-indigo-600 dark:bg-indigo-950/40"
+                                ? "border-teal-400 bg-teal-50/80 dark:border-teal-600 dark:bg-teal-950/40"
                                 : "border-zinc-200 bg-white/70 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700"
                             }`}
                           >
@@ -1205,9 +1256,9 @@ export function ChatbotForm({
                               type="button"
                               onClick={() => setDialogueShape(shape)}
                               aria-pressed={flowDialogue.shape === shape}
-                              className={`rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                              className={`rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                                 flowDialogue.shape === shape
-                                  ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-200"
+                                  ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
                                   : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
                               }`}
                             >
@@ -1244,9 +1295,9 @@ export function ChatbotForm({
                               type="button"
                               onClick={() => selectFlowTone(tone)}
                               aria-pressed={flowTone === tone}
-                              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                                 flowTone === tone
-                                  ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-200"
+                                  ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
                                   : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
                               }`}
                             >
@@ -1447,7 +1498,7 @@ export function ChatbotForm({
                                           addCustomSaveAs(dialogueStep.id)
                                         }
                                         disabled={!newSaveAsLabel.trim()}
-                                        className="shrink-0 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
+                                        className="shrink-0 rounded-lg bg-teal-600 px-3 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-40"
                                       >
                                         Criar
                                       </button>
@@ -1489,7 +1540,7 @@ export function ChatbotForm({
                                       onClick={() =>
                                         addStepOption(dialogueStep.id)
                                       }
-                                      className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                                      className="text-xs font-medium text-teal-700 hover:text-teal-800 dark:text-teal-300"
                                     >
                                       + Opção
                                     </button>
@@ -1531,7 +1582,10 @@ export function ChatbotForm({
                                             aria-label="Próxima etapa"
                                           >
                                             <option value="">
-                                              Encerrar fluxo
+                                              Encerrar e direcionar ao WhatsApp
+                                            </option>
+                                            <option value={FLOW_END_NO_WHATSAPP}>
+                                              Encerrar conversa (sem WhatsApp)
                                             </option>
                                             {flowDialogue.steps
                                               .filter(
@@ -1579,7 +1633,7 @@ export function ChatbotForm({
                         tone={flowTone}
                       />
 
-                      <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/30">
+                      <div className="rounded-xl border border-teal-200/70 bg-teal-50/50 p-4 dark:border-teal-900/50 dark:bg-teal-950/30">
                         <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                           Testar o chatbot completo
                         </p>
@@ -1650,7 +1704,7 @@ export function ChatbotForm({
                             type="button"
                             onClick={addService}
                             disabled={!newService.trim()}
-                            className="shrink-0 rounded-xl border border-zinc-200 px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                            className="shrink-0 rounded-xl border border-zinc-200 px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
                           >
                             Adicionar
                           </button>
@@ -1668,9 +1722,9 @@ export function ChatbotForm({
                               type="button"
                               onClick={() => setFlowInsuranceMode(mode)}
                               aria-pressed={flowInsuranceMode === mode}
-                              className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 sm:text-sm ${
+                              className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 sm:text-sm ${
                                 flowInsuranceMode === mode
-                                  ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-200"
+                                  ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
                                   : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
                               }`}
                             >
@@ -1725,7 +1779,7 @@ export function ChatbotForm({
                                 type="button"
                                 onClick={addInsurance}
                                 disabled={!newInsurance.trim()}
-                                className="shrink-0 rounded-xl border border-zinc-200 px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                className="shrink-0 rounded-xl border border-zinc-200 px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
                               >
                                 Adicionar
                               </button>
@@ -1754,9 +1808,9 @@ export function ChatbotForm({
                               type="button"
                               onClick={() => selectFlowTone(tone)}
                               aria-pressed={flowTone === tone}
-                              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                                 flowTone === tone
-                                  ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-200"
+                                  ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
                                   : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
                               }`}
                             >
@@ -1802,9 +1856,9 @@ export function ChatbotForm({
                                   type="button"
                                   onClick={() => toggleCollectField(field)}
                                   aria-pressed={checked}
-                                  className={`rounded-full border px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                                  className={`rounded-full border px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                                     checked
-                                      ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-200"
+                                      ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
                                       : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
                                   }`}
                                 >
@@ -1854,9 +1908,9 @@ export function ChatbotForm({
                         type="button"
                         onClick={() => toggleWhatsappEnabled(false)}
                         aria-pressed={!whatsappEnabled}
-                        className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 ${
+                        className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                           !whatsappEnabled
-                            ? "border-cyan-500/60 bg-cyan-50 text-teal-900 dark:border-cyan-500/50 dark:bg-cyan-950/40 dark:text-cyan-100"
+                            ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
                             : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
                         }`}
                       >
@@ -1866,9 +1920,9 @@ export function ChatbotForm({
                         type="button"
                         onClick={() => toggleWhatsappEnabled(true)}
                         aria-pressed={whatsappEnabled}
-                        className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 ${
+                        className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                           whatsappEnabled
-                            ? "border-cyan-500/60 bg-cyan-50 text-teal-900 dark:border-cyan-500/50 dark:bg-cyan-950/40 dark:text-cyan-100"
+                            ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
                             : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
                         }`}
                       >
@@ -1890,7 +1944,7 @@ export function ChatbotForm({
                           <button
                             type="button"
                             onClick={addDestination}
-                            className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:border-cyan-500 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-cyan-500 dark:hover:text-cyan-300"
+                            className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:border-teal-400 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-teal-600 dark:hover:text-teal-300"
                           >
                             + Adicionar consultório
                           </button>
@@ -2020,7 +2074,7 @@ export function ChatbotForm({
                                   insertWhatsAppVariable(variable.token)
                                 }
                                 title={variable.description}
-                                className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-mono text-[11px] text-zinc-700 transition-colors hover:border-cyan-500 hover:ring-1 hover:ring-cyan-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-200 dark:hover:border-cyan-500"
+                                className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-mono text-[11px] text-zinc-700 transition-colors hover:border-teal-400 hover:ring-1 hover:ring-teal-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-200 dark:hover:border-teal-500"
                               >
                                 {variable.key}
                               </button>
@@ -2038,6 +2092,24 @@ export function ChatbotForm({
                           </ul>
                         </div>
                       </div>
+
+                      <Field
+                        label="Mensagem de encerramento do chat"
+                        hint="Última mensagem exibida no chat antes do botão do WhatsApp. Deixe claro que a pessoa precisa enviar a mensagem para ser atendida."
+                        htmlFor={`${formId}-whatsapp-closing`}
+                      >
+                        <input
+                          id={`${formId}-whatsapp-closing`}
+                          value={whatsappClosingMessage}
+                          onChange={(e) =>
+                            setWhatsappClosingMessage(e.target.value)
+                          }
+                          placeholder={
+                            DEFAULT_WHATSAPP_CLOSING_MESSAGES[flowTone]
+                          }
+                          className={inputClass(false)}
+                        />
+                      </Field>
 
                       <WhatsAppPreview
                         phone={whatsappDestinations[0]?.phoneNumber ?? ""}
@@ -2123,9 +2195,9 @@ export function ChatbotForm({
                               setAvatarError("");
                             }}
                             aria-pressed={selected}
-                            className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 ${
+                            className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 ${
                               selected
-                                ? "border-indigo-400 bg-indigo-50/80 dark:border-indigo-600 dark:bg-indigo-950/40"
+                                ? "border-teal-400 bg-teal-50/80 dark:border-teal-600 dark:bg-teal-950/40"
                                 : "border-zinc-200 bg-white/70 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700"
                             }`}
                           >
@@ -2151,14 +2223,14 @@ export function ChatbotForm({
                     </div>
 
                     {isCustomLauncherPhoto(launcherAvatarUrl) ? (
-                      <div className="flex items-center gap-3 rounded-xl border border-indigo-400 bg-indigo-50/80 px-3 py-3 dark:border-indigo-600 dark:bg-indigo-950/40">
+                      <div className="flex items-center gap-3 rounded-xl border border-teal-400 bg-teal-50/80 px-3 py-3 dark:border-teal-600 dark:bg-teal-950/40">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={launcherAvatarUrl ?? ""}
                           alt="Foto personalizada do bot"
                           width={56}
                           height={56}
-                          className="size-14 shrink-0 rounded-full border border-indigo-300 object-cover dark:border-indigo-700"
+                          className="size-14 shrink-0 rounded-full border border-teal-300 object-cover dark:border-teal-700"
                         />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -2195,7 +2267,7 @@ export function ChatbotForm({
                         type="button"
                         onClick={() => avatarInputRef.current?.click()}
                         disabled={avatarUploading}
-                        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:pointer-events-none disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 disabled:pointer-events-none disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
                       >
                         {avatarUploading
                           ? "Processando…"
@@ -2283,6 +2355,9 @@ export function ChatbotForm({
                 <>
                   <dl className="space-y-2.5 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-4 text-sm dark:border-zinc-800/60 dark:bg-zinc-950/30">
                     <ReviewRow label="Chatbot" value={name.trim()} />
+                    {flowName.trim() ? (
+                      <ReviewRow label="Nome do fluxo" value={flowName.trim()} />
+                    ) : null}
                     <ReviewRow label="Cliente" value={clientName.trim()} />
                     <ReviewRow label="Função" value={specialty.trim()} />
                     <ReviewRow
@@ -2374,7 +2449,7 @@ export function ChatbotForm({
                       onClick={() => setShowTracking((open) => !open)}
                       aria-expanded={showTracking}
                       aria-controls={trackingId}
-                      className="flex min-h-11 w-full items-center justify-between gap-2 px-3.5 py-3 text-left text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500/30 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
+                      className="flex min-h-11 w-full items-center justify-between gap-2 px-3.5 py-3 text-left text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500/30 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
                     >
                       <span>Google Analytics e Meta Ads</span>
                       <span className="flex items-center gap-2 text-[11px] font-normal text-zinc-400">
@@ -2450,7 +2525,7 @@ export function ChatbotForm({
                       onClick={() => setShowAdvanced((open) => !open)}
                       aria-expanded={showAdvanced}
                       aria-controls={advancedId}
-                      className="flex min-h-11 w-full items-center justify-between gap-2 px-3.5 py-3 text-left text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500/30 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
+                      className="flex min-h-11 w-full items-center justify-between gap-2 px-3.5 py-3 text-left text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500/30 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
                     >
                       <span>Configuração avançada</span>
                       <span className="flex items-center gap-2 text-[11px] font-normal text-zinc-400">
@@ -2543,13 +2618,13 @@ export function ChatbotForm({
               ) : null}
             </div>
 
-            <footer className="sticky bottom-0 flex shrink-0 items-center justify-between gap-2 border-t border-zinc-200/70 bg-white/95 px-5 py-3.5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/95 sm:px-8">
+            <footer className="sticky bottom-0 flex shrink-0 items-center justify-between gap-2 border-t border-zinc-200/70 bg-white/95 px-5 py-3.5 backdrop-blur-sm dark:border-zinc-800/70 dark:bg-zinc-900/95 sm:px-8">
               <div>
                 {step > 0 ? (
                   <button
                     type="button"
                     onClick={() => goToStep(step - 1)}
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 max-sm:py-3 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   >
                     Voltar
                   </button>
@@ -2557,18 +2632,27 @@ export function ChatbotForm({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 max-sm:py-3 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   >
                     Cancelar
                   </button>
                 )}
               </div>
-              <button type="submit" className="btn-brand px-4 py-2">
-                {isLastStep
-                  ? isEditing
-                    ? "Salvar alterações"
-                    : "Criar chatbot"
-                  : "Continuar"}
+              <button type="submit" disabled={saving} className="btn-brand px-4 py-2 max-sm:min-h-11">
+                {saving ? (
+                  <>
+                    <IconSpinner className="size-4 animate-spin" />
+                    Salvando…
+                  </>
+                ) : isLastStep ? (
+                  isEditing ? (
+                    "Salvar alterações"
+                  ) : (
+                    "Criar chatbot"
+                  )
+                ) : (
+                  "Continuar"
+                )}
               </button>
             </footer>
           </form>
@@ -2637,7 +2721,7 @@ function ChatPreviewDialog({
             <button
               type="button"
               onClick={onRestart}
-              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               Recomeçar
             </button>
@@ -2645,7 +2729,7 @@ function ChatPreviewDialog({
               type="button"
               onClick={onClose}
               aria-label="Fechar prévia"
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
               <IconX className="size-4" />
             </button>
@@ -2694,7 +2778,7 @@ function ShapeGuideDialog({
         className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
       >
         <div className="border-b border-zinc-200/70 px-5 py-4 dark:border-zinc-800/70">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
             {FLOW_SHAPE_LABELS[shape]}
           </p>
           <h3
@@ -2753,7 +2837,7 @@ function ShapeGuideDialog({
               type="checkbox"
               checked={dontShowAgain}
               onChange={(e) => onDontShowAgainChange(e.target.checked)}
-              className="size-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500/40 dark:border-zinc-600"
+              className="size-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500/40 dark:border-zinc-600"
             />
             Não mostrar novamente
           </label>
@@ -2810,7 +2894,7 @@ function SuccessScreen({
             <button
               type="button"
               onClick={onCopy}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
               {copied ? (
                 <>
@@ -2852,7 +2936,7 @@ function SuccessScreen({
         </ol>
       </div>
 
-      <footer className="sticky bottom-0 flex shrink-0 items-center justify-end gap-2 border-t border-zinc-200/70 bg-white/95 px-5 py-3.5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/95">
+      <footer className="sticky bottom-0 flex shrink-0 items-center justify-end gap-2 border-t border-zinc-200/70 bg-white/95 px-5 py-3.5 backdrop-blur-sm dark:border-zinc-800/70 dark:bg-zinc-900/95">
         <button
           type="button"
           onClick={onDone}
@@ -2925,7 +3009,7 @@ function DestinationRow({
             type="button"
             onClick={onRemove}
             aria-label={`Remover número ${index + 1}`}
-            className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/45 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+            className="rounded-md p-1 text-rose-600/70 transition-colors hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/45 dark:text-rose-400/70 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
           >
             <IconX className="size-3.5" />
           </button>
@@ -3109,11 +3193,11 @@ function FlowPreview({
               className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 message.role === "bot"
                   ? "rounded-bl-md bg-white text-zinc-800 ring-1 ring-zinc-200/80 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700/80"
-                  : "rounded-br-md bg-indigo-600 text-white"
+                  : "rounded-br-md bg-teal-600 text-white"
               }`}
             >
               {message.role === "bot" && index === 0 ? (
-                <span className="mb-0.5 block text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                <span className="mb-0.5 block text-[10px] font-semibold text-teal-700 dark:text-teal-300">
                   {display}
                 </span>
               ) : null}
@@ -3202,7 +3286,7 @@ function inputClass(hasError: boolean): string {
   if (hasError) {
     return `${base} border-rose-400 focus-visible:border-rose-500 focus-visible:ring-rose-500/25 dark:border-rose-500/70`;
   }
-  return `${base} border-zinc-200 hover:border-zinc-300 focus-visible:border-indigo-500 focus-visible:ring-indigo-500/25 dark:border-zinc-800 dark:hover:border-zinc-700`;
+  return `${base} border-zinc-200 hover:border-zinc-300 focus-visible:border-teal-500 focus-visible:ring-teal-500/25 dark:border-zinc-800 dark:hover:border-zinc-700`;
 }
 
 function Field({

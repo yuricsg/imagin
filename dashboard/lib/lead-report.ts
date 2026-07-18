@@ -1,4 +1,5 @@
 import type { Chatbot, Lead } from "./chatbots/types";
+import { chatbotDisplayName } from "./chatbots/display";
 import { LEAD_CHANNEL, LEAD_STATUS } from "./labels";
 
 export type DateRange = { start: string; end: string };
@@ -47,7 +48,7 @@ export function buildLeadsCsv(
       lead.name,
       lead.phone,
       lead.email,
-      bot?.name ?? lead.botId,
+      bot ? chatbotDisplayName(bot) : lead.botId,
       bot?.clientName ?? lead.clientId,
       LEAD_STATUS[lead.status].label,
       lead.classification.primary,

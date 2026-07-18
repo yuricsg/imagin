@@ -4,12 +4,19 @@
 
 @theme inline {
   --font-sans: var(--font-inter);
-  --color-brand: #22d3ee;
-  --color-brand-deep: #06b6d4;
+  --color-brand: #0d9488;
+  --color-brand-deep: #0f766e;
 }
 
 :root {
   color-scheme: light;
+
+  /* Motion tokens — see DESIGN.md#motion. */
+  --motion-ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --motion-duration-fast: 150ms;
+  --motion-duration-enter: 180ms;
+  --motion-duration-shimmer: 1.5s;
+  --motion-stagger-step: 35ms;
 }
 
 :root.dark {
@@ -20,7 +27,7 @@ body {
   font-family: var(--font-inter), Inter, system-ui, sans-serif;
   background-image:
     radial-gradient(44rem 30rem at 100% -8%, color-mix(in oklab, var(--color-brand) 10%, transparent), transparent 60%),
-    radial-gradient(38rem 28rem at -6% -6%, rgba(99, 102, 241, 0.06), transparent 55%);
+    radial-gradient(38rem 28rem at -6% -6%, rgba(13, 148, 136, 0.06), transparent 55%);
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
@@ -28,9 +35,224 @@ body {
 :root.dark body {
   background-image:
     radial-gradient(46rem 32rem at 100% -8%, color-mix(in oklab, var(--color-brand) 14%, transparent), transparent 60%),
-    radial-gradient(40rem 30rem at -6% -6%, rgba(99, 102, 241, 0.1), transparent 55%);
+    radial-gradient(40rem 30rem at -6% -6%, rgba(13, 148, 136, 0.1), transparent 55%);
 }
 
+/* Primary action: solid Imagin teal (from the agency logo) — never a gradient. */
 @utility btn-brand {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-1.5 text-sm font-semibold text-teal-950 shadow-sm shadow-cyan-500/25 transition-colors hover:bg-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 disabled:pointer-events-none disabled:opacity-50 dark:bg-cyan-400 dark:text-teal-950 dark:hover:bg-cyan-300;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm shadow-teal-600/30 transition hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 disabled:pointer-events-none disabled:opacity-50;
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion system (DESIGN.md#motion). Never hand-write per-component keyframes —
+ * reuse these classes. Everything here is disabled under prefers-reduced-motion.
+ * ------------------------------------------------------------------------- */
+
+@keyframes imagin-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes imagin-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes imagin-pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, 0);
+  }
+}
+
+@keyframes imagin-menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Skeleton placeholder block with a shimmer sweep. Pair with a radius/size. */
+.motion-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: rgb(228 228 231 / 0.75); /* zinc-200 */
+}
+.dark .motion-skeleton {
+  background-color: rgb(39 39 42 / 0.75); /* zinc-800 */
+}
+.motion-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.7),
+    transparent
+  );
+  animation: imagin-shimmer var(--motion-duration-shimmer) infinite;
+}
+.dark .motion-skeleton::after {
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.08),
+    transparent
+  );
+}
+
+/* Entrance: fade + 5px rise. Stagger via inline `animationDelay` (≤10 items). */
+.motion-enter {
+  animation: imagin-fade-up var(--motion-duration-enter) var(--motion-ease-out)
+    both;
+}
+
+/* Live-activity pulse for badges such as "N novos". */
+.motion-pulse {
+  animation: imagin-pulse-ring 2.4s var(--motion-ease-out) infinite;
+}
+
+/* Dropdown menu entrance: fade + 4px rise, fast (kebab menus, popovers). */
+.motion-menu {
+  animation: imagin-menu-pop var(--motion-duration-fast) var(--motion-ease-out)
+    both;
+}
+
+/* ---------------------------------------------------------------------------
+ * RobotLoader (app/loading.tsx) — the mascot "working" while data loads.
+ * ------------------------------------------------------------------------- */
+
+@keyframes imagin-robot-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(2deg);
+  }
+}
+
+@keyframes imagin-progress-slide {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes imagin-dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* 4 rotating phrases, 2.5s each over a 10s loop (delay per phrase inline). */
+@keyframes imagin-phrase {
+  0% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  2.5%,
+  22.5% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  25%,
+  100% {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+/* Mascot bobbing: subtle vertical bob + tilt, "working". */
+.motion-robot {
+  animation: imagin-robot-bob 1.8s ease-in-out infinite;
+}
+
+/* Indeterminate progress: 40% fill sliding across the track. */
+.motion-progress-fill {
+  animation: imagin-progress-slide 1.4s ease-in-out infinite;
+}
+
+/* "Working…" ellipsis dots. */
+.motion-dot {
+  animation: imagin-dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* Rotating loading phrase (absolute-stacked, one visible at a time). */
+.motion-phrase {
+  animation: imagin-phrase 10s linear infinite;
+}
+
+/* Reduced motion: static robot, bar fixed at 60%, single static phrase. */
+@media (prefers-reduced-motion: reduce) {
+  .motion-phrase {
+    display: none;
+  }
+  .motion-phrase-static {
+    display: inline;
+  }
+  .motion-progress-fill {
+    width: 60%;
+    transform: none;
+  }
+}
+
+/* Clickable card/row: lift 1px + subtle shadow on hover, press on :active. */
+.motion-lift {
+  transition:
+    transform var(--motion-duration-fast) var(--motion-ease-out),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-out);
+}
+.motion-lift:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 12px -6px rgb(24 24 27 / 0.12),
+    0 1px 3px rgb(24 24 27 / 0.06);
+}
+.dark .motion-lift:hover {
+  box-shadow:
+    0 4px 12px -6px rgb(0 0 0 / 0.5),
+    0 1px 3px rgb(0 0 0 / 0.4);
+}
+.motion-press {
+  transition: transform var(--motion-duration-fast) var(--motion-ease-out);
+}
+.motion-press:active {
+  transform: scale(0.98);
+}
+
+/* Reduced motion: content stays complete; every animation/transition is instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

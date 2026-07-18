@@ -4,12 +4,80 @@ import {
   defaultFlowForTemplate,
   extractLeadFieldsFromAnswers,
   applyToneToDialogue,
+  farewellMessageForTone,
+  FLOW_END_NO_WHATSAPP,
+  isFarewellEnding,
+  normalizeDialogue,
+  resolveAnswerLabels,
   resolveGreeting,
   resolveNextStepId,
   seedDialogueFromTemplate,
   suggestTemplateForSpecialty,
   validateDialogueFlow,
+  type DialogueFlow,
 } from "./flows";
+
+/** Dialogue with choice steps storing option ids, mirroring the reported bot. */
+function choiceDialogue(): DialogueFlow {
+  return {
+    version: 1,
+    shape: "linear",
+    greeting: "",
+    startStepId: "step-nome",
+    steps: [
+      {
+        id: "step-nome",
+        question: "Como posso te chamar?",
+        inputType: "text",
+        saveAs: "name",
+      },
+      {
+        id: "step-exames",
+        question: "Quais exames você deseja agendar?",
+        inputType: "multi_choice",
+        saveAs: "exame",
+        options: [
+          { id: "opt-mrnnzskh-62", label: "Parecer cardiológico - pré operatório" },
+          { id: "opt-mrnnzpxc-61", label: "Teste ergométrico" },
+        ],
+      },
+      {
+        id: "step-solicitacao",
+        question: "Possui solicitação médica?",
+        inputType: "single_choice",
+        saveAs: "solicitacao",
+        options: [
+          { id: "opt-mrno0ong-67", label: "Sim" },
+          { id: "opt-nao", label: "Não" },
+        ],
+      },
+    ],
+    customSaveLabels: { exame: "Exame", solicitacao: "Solicitação" },
+  };
+}
+
+describe("resolveAnswerLabels", () => {
+  it("maps option ids back to their labels", () => {
+    const dialogue = choiceDialogue();
+    const step = dialogue.steps[1];
+
+    expect(resolveAnswerLabels(step, "opt-mrnnzskh-62")).toBe(
+      "Parecer cardiológico - pré operatório",
+    );
+    expect(
+      resolveAnswerLabels(step, ["opt-mrnnzskh-62", "opt-mrnnzpxc-61"]),
+    ).toEqual(["Parecer cardiológico - pré operatório", "Teste ergométrico"]);
+  });
+
+  it("keeps unknown ids and free text unchanged", () => {
+    const dialogue = choiceDialogue();
+    const [textStep, choiceStep] = dialogue.steps;
+
+    expect(resolveAnswerLabels(choiceStep, "opt-removida")).toBe("opt-removida");
+    expect(resolveAnswerLabels(textStep, "gard")).toBe("gard");
+    expect(resolveAnswerLabels(undefined, "qualquer")).toBe("qualquer");
+  });
+});
 
 describe("suggestTemplateForSpecialty", () => {
   it("maps known keywords to templates", () => {
@@ -164,6 +232,35 @@ describe("seedDialogueFromTemplate / navigation", () => {
     expect(fields.custom.convenio).toBe("Unimed");
   });
 
+  it("resolves option ids to labels when extracting lead fields", () => {
+    const dialogue = choiceDialogue();
+    const fields = extractLeadFieldsFromAnswers(dialogue, {
+      "step-nome": "gard",
+      "step-exames": ["opt-mrnnzskh-62", "opt-mrnnzpxc-61"],
+      "step-solicitacao": "opt-mrno0ong-67",
+    });
+
+    expect(fields.name).toBe("gard");
+    expect(fields.custom.exame).toBe(
+      "Parecer cardiológico - pré operatório, Teste ergométrico",
+    );
+    expect(fields.custom.solicitacao).toBe("Sim");
+  });
+
+  it("keeps free-text answers and unknown option ids as-is", () => {
+    const dialogue = choiceDialogue();
+    const fields = extractLeadFieldsFromAnswers(dialogue, {
+      "step-nome": "gard",
+      "step-exames": ["opt-mrnnzskh-62", "opt-removida"],
+      "step-solicitacao": "Resposta digitada à mão",
+    });
+
+    expect(fields.custom.exame).toBe(
+      "Parecer cardiológico - pré operatório, opt-removida",
+    );
+    expect(fields.custom.solicitacao).toBe("Resposta digitada à mão");
+  });
+
   it("rejects choice steps with fewer than 2 options", () => {
     const dialogue = seedDialogueFromTemplate("appointment", {
       insuranceMode: "particular",
@@ -281,5 +378,97 @@ describe("applyToneToDialogue", () => {
     expect(
       formal.some((m) => m.text === "Por favor, informe seu nome completo."),
     ).toBe(true);
+  });
+});
+
+describe("FLOW_END_NO_WHATSAPP (encerrar sem WhatsApp)", () => {
+  /** Branching dialogue whose second option ends with the given destination. */
+  function branchingDialogue(nextStepId: string | undefined): DialogueFlow {
+    return {
+      version: 1,
+      shape: "branching",
+      greeting: "Olá!",
+      startStepId: "step-interesse",
+      steps: [
+        {
+          id: "step-interesse",
+          question: "Posso te ajudar a agendar?",
+          inputType: "single_choice",
+          options: [
+            { id: "opt-sim", label: "Quero agendar", nextStepId: "step-nome" },
+            {
+              id: "opt-nao",
+              label: "Não tenho interesse no momento",
+              ...(nextStepId ? { nextStepId } : {}),
+            },
+          ],
+        },
+        {
+          id: "step-nome",
+          question: "Qual é o seu nome?",
+          inputType: "text",
+          saveAs: "name",
+        },
+      ],
+    };
+  }
+
+  it("normalizeDialogue preserves the sentinel through a JSON round-trip", () => {
+    const dialogue = branchingDialogue(FLOW_END_NO_WHATSAPP);
+    const restored = normalizeDialogue(JSON.parse(JSON.stringify(dialogue)));
+    expect(restored?.steps[0]?.options?.[1]?.nextStepId).toBe(
+      FLOW_END_NO_WHATSAPP,
+    );
+  });
+
+  it("validateDialogueFlow accepts the sentinel as a valid destination", () => {
+    expect(validateDialogueFlow(branchingDialogue(FLOW_END_NO_WHATSAPP))).toEqual(
+      [],
+    );
+    // Unknown step ids are still flagged.
+    const issues = validateDialogueFlow(branchingDialogue("step-inexistente"));
+    expect(issues.some((i) => i.message.includes("etapa inexistente"))).toBe(
+      true,
+    );
+  });
+
+  it("resolveNextStepId returns the sentinel so the runtime can branch on it", () => {
+    const dialogue = branchingDialogue(FLOW_END_NO_WHATSAPP);
+    expect(resolveNextStepId(dialogue, "step-interesse", "opt-nao")).toBe(
+      FLOW_END_NO_WHATSAPP,
+    );
+    expect(isFarewellEnding(FLOW_END_NO_WHATSAPP)).toBe(true);
+    expect(isFarewellEnding("step-nome")).toBe(false);
+    expect(isFarewellEnding(undefined)).toBe(false);
+  });
+
+  it("preview ends with the farewell line instead of the closing line", () => {
+    const dialogue = branchingDialogue(FLOW_END_NO_WHATSAPP);
+    // The preview walks the first option of each step; put the declining one
+    // first so the walk takes the farewell exit.
+    dialogue.steps[0].options = [
+      dialogue.steps[0].options![1],
+      dialogue.steps[0].options![0],
+    ];
+    const preview = buildFlowPreview(
+      {
+        ...defaultFlowForTemplate("patient-capture"),
+        tone: "friendly",
+        dialogue,
+      },
+      { botName: "Bot", clientName: "Clínica" },
+    );
+    expect(preview.at(-1)?.text).toBe(farewellMessageForTone("friendly"));
+    expect(preview.some((m) => m.text.includes("Prontinho"))).toBe(false);
+    expect(preview.some((m) => m.text.includes("WhatsApp"))).toBe(false);
+  });
+
+  it("farewellMessageForTone has friendly and formal defaults", () => {
+    expect(farewellMessageForTone("friendly")).toBe(
+      "Tudo bem! Se precisar, é só chamar por aqui. 😊",
+    );
+    expect(farewellMessageForTone("formal")).toBe(
+      "Agradecemos o contato. Se precisar, estamos à disposição por aqui.",
+    );
   });
 });

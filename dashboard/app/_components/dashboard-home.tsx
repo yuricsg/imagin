@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { Chatbot, Client, Lead, LeadStatus } from "@/lib/chatbots/types";
 import type { DashboardData } from "@/lib/dashboard";
 import { ACCENTS } from "@/lib/chatbots/accents";
@@ -21,14 +21,30 @@ import {
   normalizeStoredChatbot,
 } from "@/lib/chatbots/create";
 import { apiDeleteChatbot } from "@/lib/api/chatbots";
+import { chatbotDisplayName } from "@/lib/chatbots/display";
+import { embedSnippet } from "@/lib/format";
 import { MetricsRow } from "./metrics-row";
 import { ChatbotList } from "./chatbot-list";
 import { EmbedBlock } from "./embed-block";
 import { LeadsToolbar } from "./leads-toolbar";
 import { LeadsTable } from "./leads-table";
 import { LeadDetailsModal } from "./lead-details-modal";
+import { CommandPalette, type CommandItem } from "./command-palette";
+import { COMMAND_PALETTE_EVENT } from "./command-k-button";
+import { usePinnedCommands } from "./use-pinned-commands";
+import { useThemeOptional } from "./theme-provider";
 import { EmptyState } from "./ui";
-import { IconAlert, IconBot, IconInboxStack, IconPlus } from "./icons";
+import {
+  IconAlert,
+  IconBot,
+  IconCopy,
+  IconDownload,
+  IconInbox,
+  IconInboxStack,
+  IconPencil,
+  IconPlus,
+  IconSun,
+} from "./icons";
 
 export function DashboardHome({ data }: { data: DashboardData }) {
   const router = useRouter();
@@ -47,9 +63,16 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [clientId, setClientId] = useState<string>("all");
   const [status, setStatus] = useState<LeadStatus | "all">("all");
   const [dateRange, setDateRange] = useState<DateRange>({ start: "", end: "" });
+  const [onlyNew, setOnlyNew] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   // IDs of bots deleted this session — filtered out immediately without page reload.
   const [deletedBotIds, setDeletedBotIds] = useState<Set<string>>(new Set());
+
+  const themeCtx = useThemeOptional();
+
+  // Pinned palette commands (localStorage external store, SSR-safe).
+  const { pinnedIds, togglePin } = usePinnedCommands();
 
   // Bots registered through the UI live only in the browser (localStorage), read
   // as an external store so SSR and the first client render agree (both empty).
@@ -140,6 +163,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
     return contextLeads.filter((lead) => {
+      if (onlyNew && lead.status !== "new") return false;
       if (status !== "all" && lead.status !== status) return false;
       if (query) {
         const haystack =
@@ -148,21 +172,40 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       }
       return true;
     });
-  }, [contextLeads, status, search]);
+  }, [contextLeads, status, search, onlyNew]);
+
+  const newCount = useMemo(
+    () => contextLeads.filter((lead) => lead.status === "new").length,
+    [contextLeads],
+  );
 
   const hasActiveFilters =
     selectedBotId !== null ||
     clientId !== "all" ||
     status !== "all" ||
+    onlyNew ||
     dateRange.start !== "" ||
     dateRange.end !== "" ||
     search.trim() !== "";
+
+  // Troca de filtros discretos (bot, cliente, status, datas) re-executa o
+  // stagger de entrada da tabela; a busca por texto fica fora da assinatura
+  // para não re-animar a cada tecla digitada.
+  const filterSignature = [
+    selectedBotId,
+    clientId,
+    status,
+    onlyNew ? "new" : "all",
+    dateRange.start,
+    dateRange.end,
+  ].join("|");
 
   function clearFilters() {
     setSelectedBotId(null);
     setSearch("");
     setClientId("all");
     setStatus("all");
+    setOnlyNew(false);
     setDateRange({ start: "", end: "" });
   }
 
@@ -179,9 +222,158 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
+  // Global shortcuts: ⌘K/Ctrl+K toggles the palette (even from inputs),
+  // "/" focuses the lead search, "n" goes to the new-bot page. Bare keys
+  // never fire while typing in a field.
+  useEffect(() => {
+    function isTypingTarget(target: EventTarget | null) {
+      return (
+        target instanceof HTMLElement &&
+        target.closest("input, textarea, select, [contenteditable='true']") !==
+          null
+      );
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      if (isTypingTarget(event.target)) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        document.getElementById("leads-search")?.focus();
+      } else if (
+        event.key.toLowerCase() === "n" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        router.push("/chatbots/new");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [router]);
+
+  // The header ⌘K button toggles the palette through a window event.
+  useEffect(() => {
+    function onToggle() {
+      setPaletteOpen((open) => !open);
+    }
+    window.addEventListener(COMMAND_PALETTE_EVENT, onToggle);
+    return () => window.removeEventListener(COMMAND_PALETTE_EVENT, onToggle);
+  }, []);
+
+  function cycleTheme() {
+    if (!themeCtx) return;
+    const order = ["light", "dark", "system"] as const;
+    const next = order[(order.indexOf(themeCtx.theme) + 1) % order.length];
+    themeCtx.setTheme(next);
+  }
+
+  // Command list — rebuilt every render (cheap) so hints/counts stay fresh.
+  const commands: CommandItem[] = [
+    {
+      id: "create-bot",
+      group: "Ações",
+      label: "Criar chatbot",
+      hint: "N",
+      keywords: "novo cadastrar bot",
+      icon: <IconPlus className="size-4" />,
+      run: () => router.push("/chatbots/new"),
+    },
+    {
+      id: "only-new",
+      group: "Ações",
+      label: onlyNew ? "Mostrar todos os leads" : "Somente novos",
+      hint: String(newCount),
+      keywords: "filtro leads novos status",
+      icon: <IconInbox className="size-4" />,
+      run: () => setOnlyNew((value) => !value),
+    },
+    {
+      id: "export-csv",
+      group: "Ações",
+      label: "Exportar CSV",
+      keywords: "baixar planilha leads relatorio",
+      icon: <IconDownload className="size-4" />,
+      run: () => {
+        if (filteredLeads.length > 0) exportCsv();
+      },
+    },
+    ...(themeCtx
+      ? [
+          {
+            id: "toggle-theme",
+            group: "Ações",
+            label: "Alternar tema",
+            keywords: "claro escuro sistema dark light",
+            icon: <IconSun className="size-4" />,
+            run: cycleTheme,
+          } satisfies CommandItem,
+        ]
+      : []),
+    ...(selectedBot
+      ? [
+          {
+            id: "copy-snippet",
+            group: "Ações",
+            label: `Copiar código de instalação — ${chatbotDisplayName(selectedBot)}`,
+            keywords: "embed snippet script incorporar",
+            icon: <IconCopy className="size-4" />,
+            run: async () => {
+              try {
+                await navigator.clipboard.writeText(embedSnippet(selectedBot));
+                return "Código de instalação copiado!";
+              } catch {
+                return "Não foi possível copiar.";
+              }
+            },
+          } satisfies CommandItem,
+        ]
+      : []),
+    ...bots.map((bot) => ({
+      id: `open-bot-${bot.id}`,
+      group: "Chatbots",
+      label: chatbotDisplayName(bot),
+      hint: bot.id === selectedBotId ? "selecionado" : undefined,
+      keywords: `${bot.name} ${bot.clientName} abrir filtrar`,
+      icon: (
+        <span
+          className={`size-2.5 rounded-full ${ACCENTS[bot.accent].dot}`}
+        />
+      ),
+      run: () => setSelectedBotId(bot.id),
+    })),
+    // Edit per editable bot (delete stays menu-only, with confirm).
+    ...bots
+      .filter((bot) => editableBotIds.has(bot.id))
+      .map((bot): CommandItem => ({
+        id: `edit-bot-${bot.id}`,
+        group: "Chatbots",
+        label: `Editar ${chatbotDisplayName(bot)}`,
+        keywords: `${bot.name} ${bot.clientName} editar alterar`,
+        icon: <IconPencil className="size-4" />,
+        run: () => {
+          const normalized = normalizeStoredChatbot(bot);
+          if (normalized) router.push(`/chatbots/${normalized.id}/edit`);
+        },
+      })),
+    // Duplicate for every bot, including non-editable (demo) ones.
+    ...bots.map((bot): CommandItem => ({
+      id: `duplicate-bot-${bot.id}`,
+      group: "Chatbots",
+      label: `Duplicar ${chatbotDisplayName(bot)}`,
+      keywords: `${bot.name} ${bot.clientName} duplicar copiar`,
+      icon: <IconCopy className="size-4" />,
+      run: () => router.push(`/chatbots/new?from=${bot.id}`),
+    })),
+  ];
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="motion-enter flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             Visão geral
@@ -195,7 +387,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
             {bots.length} {bots.length === 1 ? "chatbot" : "chatbots"} ·{" "}
             {clients.length} {clients.length === 1 ? "cliente" : "clientes"}
           </p>
-          <Link href="/chatbots/new" className="btn-brand px-4 py-2.5">
+          <Link href="/chatbots/new" className="btn-brand px-4 py-2.5 max-sm:min-h-11">
             <IconPlus className="size-4" />
             Novo chatbot
           </Link>
@@ -212,9 +404,9 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       ) : null}
 
       {bots.length === 0 ? (
-        <section className="rounded-xl border border-dashed border-zinc-300/90 bg-white/70 px-5 py-8 text-center dark:border-zinc-700/80 dark:bg-zinc-900/40 sm:px-8 sm:py-10">
+        <section className="motion-enter rounded-xl border border-dashed border-zinc-300/90 bg-white px-5 py-8 text-center dark:border-zinc-700/80 dark:bg-zinc-900/60 sm:px-8 sm:py-10">
           <div className="mx-auto max-w-md space-y-3">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-cyan-500 text-teal-950 shadow-sm shadow-cyan-500/25">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-teal-600 text-white shadow-sm shadow-teal-600/30">
               <IconBot className="size-6" />
             </div>
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
@@ -234,7 +426,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <section className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white/80 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/55 lg:col-span-2">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white dark:border-zinc-800/80 dark:bg-zinc-900/70 lg:col-span-2">
           <header className="flex items-center justify-between gap-2 border-b border-zinc-200/70 px-5 py-4 dark:border-zinc-800/70">
             <div className="flex items-baseline gap-2">
               <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
@@ -251,7 +443,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
                 <span
                   className={`size-1.5 shrink-0 rounded-full ${ACCENTS[selectedBot.accent].dot}`}
                 />
-                <span className="truncate">filtrando por {selectedBot.name}</span>
+                <span className="truncate">filtrando por {chatbotDisplayName(selectedBot)}</span>
               </span>
             ) : null}
           </header>
@@ -269,21 +461,25 @@ export function DashboardHome({ data }: { data: DashboardData }) {
             onDateRange={setDateRange}
             bots={bots}
             clients={clients}
+            onlyNew={onlyNew}
+            onOnlyNew={setOnlyNew}
+            newCount={newCount}
             hasActiveFilters={hasActiveFilters}
             onClear={clearFilters}
             onExport={exportCsv}
             exportDisabled={filteredLeads.length === 0}
           />
 
-          {filteredLeads.length > 0 ? (
-            <LeadsTable
-              leads={filteredLeads}
-              botsById={botsById}
-              showBotColumn={selectedBotId === null}
-              nowMs={nowMs}
-              onOpenLead={setSelectedLead}
-            />
-          ) : hasActiveFilters ? (
+          <div key={filterSignature}>
+            {filteredLeads.length > 0 ? (
+              <LeadsTable
+                leads={filteredLeads}
+                botsById={botsById}
+                showBotColumn={selectedBotId === null}
+                nowMs={nowMs}
+                onOpenLead={setSelectedLead}
+              />
+            ) : hasActiveFilters ? (
             <EmptyState
               icon={<IconInboxStack className="size-5" />}
               title="Nenhum lead corresponde aos filtros"
@@ -298,13 +494,14 @@ export function DashboardHome({ data }: { data: DashboardData }) {
                 </button>
               }
             />
-          ) : (
-            <EmptyState
-              icon={<IconInboxStack className="size-5" />}
-              title="Nenhum lead ainda"
-              description="Assim que um chatbot capturar um lead, ele aparece aqui."
-            />
-          )}
+            ) : (
+              <EmptyState
+                icon={<IconInboxStack className="size-5" />}
+                title="Nenhum lead ainda"
+                description="Assim que um chatbot capturar um lead, ele aparece aqui."
+              />
+            )}
+          </div>
         </section>
 
         <div className="space-y-6">
@@ -319,6 +516,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               const normalized = normalizeStoredChatbot(bot);
               if (normalized) router.push(`/chatbots/${normalized.id}/edit`);
             }}
+            onDuplicate={(bot) => router.push(`/chatbots/new?from=${bot.id}`)}
             onDelete={handleDelete}
             nowMs={nowMs}
           />
@@ -326,7 +524,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
           {selectedBot ? (
             <EmbedBlock bot={selectedBot} />
           ) : (
-            <div className="rounded-xl border border-dashed border-zinc-300/80 bg-white/60 p-5 backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-900/40">
+            <div className="rounded-xl border border-dashed border-zinc-300/80 bg-white p-5 dark:border-zinc-700/80 dark:bg-zinc-900/60">
               <EmptyState
                 icon={<IconBot className="size-5" />}
                 title="Selecione um chatbot"
@@ -344,6 +542,14 @@ export function DashboardHome({ data }: { data: DashboardData }) {
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+        pinnedIds={pinnedIds}
+        onTogglePin={togglePin}
+      />
     </main>
   );
 }

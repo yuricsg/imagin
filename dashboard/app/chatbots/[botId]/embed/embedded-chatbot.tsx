@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeStoredChatbot } from "@/lib/chatbots/create";
-import { hasCustomDialogue, resolveGreeting } from "@/lib/chatbots/flows";
+import { hasCustomDialogue, farewellMessageForTone, resolveGreeting } from "@/lib/chatbots/flows";
 import { CustomDialogueChat } from "./custom-dialogue-chat";
 import {
   createChatSessionTracker,
@@ -112,17 +112,21 @@ function resolveIntroMessages(config: ChatbotConfig): string[] {
   ];
 }
 
-function resolveCompletionMessages(config: ChatbotConfig): string[] {
+export function resolveCompletionMessages(config: ChatbotConfig): string[] {
   const bot = resolveDashboardBot(config);
   if (bot?.whatsapp.enabled) {
+    // Operator-defined closing line wins over the tone default.
+    const customClosing = bot.whatsapp.closingMessage?.trim();
     return bot.flow.tone === "formal"
       ? [
           "Obrigado. Suas informações foram registradas. 🙏",
-          "Continue o atendimento pelo WhatsApp para confirmar os detalhes.",
+          customClosing ||
+            "Continue o atendimento pelo WhatsApp para confirmar os detalhes.",
         ]
       : [
           "Prontinho! Já recebemos seus dados. 🙏",
-          "Continue no WhatsApp para falar com nossa equipe e ver os horários.",
+          customClosing ||
+            "Continue no WhatsApp para falar com nossa equipe e ver os horários.",
         ];
   }
   if (bot) {
@@ -140,6 +144,28 @@ function resolveCompletionMessages(config: ChatbotConfig): string[] {
     "Certo. Obrigada! 🙏",
     "Envie a mensagem para a secretária para tirar dúvidas e verificar os horários disponíveis.",
   ];
+}
+
+/**
+ * Mirrors `isNotInterestedText` in backend/src/conversations/session-state.ts —
+ * keep the terms in sync so the widget treats as no-interest exactly what the
+ * funnel will classify as `not_interested`.
+ */
+export function isNotInterestedDecision(text: string): boolean {
+  const normalized = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  return ["nao tenho interesse", "sem interesse", "nao quero", "agora nao"].some(
+    (term) => normalized.includes(term),
+  );
+}
+
+/** Goodbye bubbles when the visitor declines — no handoff, no WhatsApp CTA. */
+export function resolveFarewellMessages(config: ChatbotConfig): string[] {
+  const bot = resolveDashboardBot(config);
+  return [farewellMessageForTone(bot?.flow.tone ?? "friendly")];
 }
 
 const fallbackConfig: ChatbotConfig = {
@@ -173,6 +199,9 @@ export function EmbeddedChatbot({
   const [selectedExams, setSelectedExams] = useState<string[]>([]);
   const [consultationNeed, setConsultationNeed] = useState("");
   const [leadResponse, setLeadResponse] = useState<LeadResponse | null>(null);
+  // True when the visitor declined: the lead is still registered, but the
+  // ending shows a polite goodbye instead of the WhatsApp handoff CTA.
+  const [endedWithoutWhatsApp, setEndedWithoutWhatsApp] = useState(false);
   const [isConfigLoading, setIsConfigLoading] = useState(true);
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -438,7 +467,7 @@ export function EmbeddedChatbot({
     intent: LeadIntent;
     medicalRequestStatus?: string;
     consultationDecision?: string;
-  }, restoreStep: Step) {
+  }, restoreStep: Step, ending: "handoff" | "farewell" = "handoff") {
     setIsSubmitting(true);
     setError("");
     setActiveStep("idle");
@@ -467,7 +496,13 @@ export function EmbeddedChatbot({
       setLeadResponse((await response.json()) as LeadResponse);
       await sessionTracker.trackEvent({ type: "flow_completed" });
       setIsSubmitting(false);
-      await playBotMessages(resolveCompletionMessages(config), () => setActiveStep("complete"));
+      setEndedWithoutWhatsApp(ending === "farewell");
+      await playBotMessages(
+        ending === "farewell"
+          ? resolveFarewellMessages(config)
+          : resolveCompletionMessages(config),
+        () => setActiveStep("complete"),
+      );
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -678,6 +713,7 @@ export function EmbeddedChatbot({
                       consultationDecision: decision,
                     },
                     "consultationDecision",
+                    isNotInterestedDecision(decision) ? "farewell" : "handoff",
                   );
                 }}
               >
@@ -697,7 +733,7 @@ export function EmbeddedChatbot({
           </div>
         )}
 
-        {activeStep === "complete" && leadResponse && (
+        {activeStep === "complete" && leadResponse && !endedWithoutWhatsApp && (
           <div className="space-y-3">
             <a
               href={leadResponse.whatsappUrl}

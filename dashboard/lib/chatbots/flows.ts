@@ -31,7 +31,10 @@ export type FlowSaveAs = FlowMapsTo | (string & {});
 export interface FlowStepOption {
   id: string;
   label: string;
-  /** Branching only: next step id, or omit / empty to end the flow. */
+  /**
+   * Branching only: next step id, omit / empty to end the flow with the
+   * WhatsApp handoff, or FLOW_END_NO_WHATSAPP to end politely without it.
+   */
   nextStepId?: string;
 }
 
@@ -158,6 +161,27 @@ export function labelForSaveAs(
   return customLabels?.[key]?.trim() || key;
 }
 
+/**
+ * Resolves a stored answer to what the visitor actually saw: choice steps
+ * persist option ids (needed for branching), so they are mapped back to their
+ * labels here. Free-text answers and unknown ids are returned unchanged —
+ * never an empty string.
+ */
+export function resolveAnswerLabels(
+  step: FlowStep | undefined,
+  answer: string | string[],
+): string | string[] {
+  const options = step?.options;
+  if (!options || options.length === 0) return answer;
+  const toLabel = (value: string) => {
+    const label = options
+      .find((option) => option.id === value)
+      ?.label.trim();
+    return label || value;
+  };
+  return Array.isArray(answer) ? answer.map(toLabel) : toLabel(answer);
+}
+
 /** Slug for a new custom save category. */
 export function slugifySaveAsKey(label: string): string {
   const base = label
@@ -257,6 +281,27 @@ export function closingMessageForTone(tone: FlowTone): string {
   return tone === "formal"
     ? "Agradecemos o contato. Nossa equipe analisará as informações e retornará em breve."
     : "Prontinho! 🎉 Já recebemos tudo — em breve alguém da equipe fala com você.";
+}
+
+/**
+ * Serialized `FlowStepOption.nextStepId` meaning "end the conversation politely,
+ * without the WhatsApp handoff". An empty nextStepId keeps the original
+ * behavior (end and hand off to WhatsApp), so bots saved before this value
+ * existed are unaffected. The value can never collide with generated step ids
+ * (`step-*`).
+ */
+export const FLOW_END_NO_WHATSAPP = "end:no-whatsapp";
+
+/** True when a nextStepId is the polite no-WhatsApp ending. */
+export function isFarewellEnding(nextStepId: string | undefined): boolean {
+  return nextStepId?.trim() === FLOW_END_NO_WHATSAPP;
+}
+
+/** Goodbye bubble when the flow ends without the WhatsApp handoff. */
+export function farewellMessageForTone(tone: FlowTone): string {
+  return tone === "formal"
+    ? "Agradecemos o contato. Se precisar, estamos à disposição por aqui."
+    : "Tudo bem! Se precisar, é só chamar por aqui. 😊";
 }
 
 /** All stock strings for a template (greeting + prompts + collect + legacy). */
@@ -700,7 +745,7 @@ function isChoiceType(type: FlowInputType): boolean {
 /** Preview driven by DialogueFlow when present; falls back to template preview. */
 export function buildFlowPreview(
   flow: ChatbotFlowConfig,
-  ctx: { botName: string; clientName: string },
+  ctx: { botName: string; clientName: string; closingMessage?: string },
 ): FlowPreviewMessage[] {
   if (flow.dialogue && flow.dialogue.steps.length > 0) {
     return buildDialoguePreview(flow.dialogue, flow, ctx);
@@ -745,7 +790,7 @@ export function buildFlowPreview(
 
   messages.push({
     role: "bot",
-    text: closingMessageForTone(flow.tone),
+    text: ctx.closingMessage?.trim() || closingMessageForTone(flow.tone),
   });
 
   return messages;
@@ -754,7 +799,7 @@ export function buildFlowPreview(
 function buildDialoguePreview(
   dialogue: DialogueFlow,
   flow: ChatbotFlowConfig,
-  ctx: { botName: string; clientName: string },
+  ctx: { botName: string; clientName: string; closingMessage?: string },
 ): FlowPreviewMessage[] {
   const messages: FlowPreviewMessage[] = [
     {
@@ -769,6 +814,7 @@ function buildDialoguePreview(
   let currentId: string | undefined =
     dialogue.startStepId || dialogue.steps[0]?.id;
   const visited = new Set<string>();
+  let endedFarewell = false;
 
   while (currentId && byId.has(currentId) && !visited.has(currentId)) {
     visited.add(currentId);
@@ -779,7 +825,13 @@ function buildDialoguePreview(
       const option = step.options[0];
       messages.push({ role: "visitor", text: option.label });
       if (dialogue.shape === "branching") {
-        currentId = option.nextStepId || undefined;
+        const next = option.nextStepId?.trim();
+        if (isFarewellEnding(next)) {
+          endedFarewell = true;
+          currentId = undefined;
+        } else {
+          currentId = next || undefined;
+        }
         continue;
       }
     } else {
@@ -803,7 +855,9 @@ function buildDialoguePreview(
 
   messages.push({
     role: "bot",
-    text: closingMessageForTone(flow.tone),
+    text: endedFarewell
+      ? farewellMessageForTone(flow.tone)
+      : ctx.closingMessage?.trim() || closingMessageForTone(flow.tone),
   });
 
   return messages;
@@ -880,7 +934,9 @@ export function extractLeadFieldsFromAnswers(
     if (!saveAs) continue;
     const raw = answers[step.id];
     if (raw == null) continue;
-    const value = Array.isArray(raw) ? raw.join(", ") : raw;
+    // Choice answers are stored as option ids — surface the labels instead.
+    const resolved = resolveAnswerLabels(step, raw);
+    const value = Array.isArray(resolved) ? resolved.join(", ") : resolved;
     const trimmed = value.trim();
     if (!trimmed) continue;
     if (isBuiltinSaveAs(saveAs)) {
@@ -971,7 +1027,7 @@ export function validateDialogueFlow(
       if (!isChoiceType(step.inputType)) continue;
       for (const option of step.options ?? []) {
         const next = option.nextStepId?.trim();
-        if (next && !ids.has(next)) {
+        if (next && !isFarewellEnding(next) && !ids.has(next)) {
           issues.push({
             stepId: step.id,
             message: `Opção "${option.label}" aponta para uma etapa inexistente.`,

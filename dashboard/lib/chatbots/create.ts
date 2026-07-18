@@ -79,6 +79,25 @@ function cleanStringList(value: unknown): string[] {
 }
 
 /**
+ * Aspirational embed domains that shipped as DEFAULT_EMBED before the real
+ * deploys existed — they were never configured in DNS (NXDOMAIN).
+ */
+const LEGACY_EMBED_DEFAULT_URLS = {
+  apiBaseUrl: "https://api.imagin.app",
+  appBaseUrl: "https://app.imagin.app",
+} as const;
+
+/**
+ * Bots saved while DEFAULT_EMBED pointed at the legacy domains carry the
+ * broken URL inside dashboardConfig. Heal exactly those values (with or
+ * without a trailing slash) to the current default on read — custom values
+ * are never touched, and the healed value persists on the next save.
+ */
+function healLegacyEmbedUrl(value: string, legacy: string, current: string): string {
+  return value === legacy || value === `${legacy}/` ? current : value;
+}
+
+/**
  * Fills in flow / tracking / embed defaults for bots saved before those fields
  * existed — prevents crashes when opening the edit wizard.
  */
@@ -141,6 +160,11 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
   return {
     id: record.id,
     name: record.name,
+    // Optional operator-facing list name; dropped when empty so the panel
+    // falls back to the visitor-facing `name`.
+    ...(typeof record.flowName === "string" && record.flowName.trim()
+      ? { flowName: record.flowName.trim() }
+      : {}),
     clientId:
       typeof record.clientId === "string"
         ? record.clientId
@@ -180,8 +204,15 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
         whatsappRaw.routingQuestion.trim()
           ? whatsappRaw.routingQuestion.trim()
           : DEFAULT_WHATSAPP_ROUTING_QUESTION;
+      // Optional operator closing line; dropped when blank so the widget
+      // falls back to the tone default.
+      const closingMessage =
+        typeof whatsappRaw?.closingMessage === "string" &&
+        whatsappRaw.closingMessage.trim()
+          ? whatsappRaw.closingMessage.trim()
+          : undefined;
       if (!enabled) {
-        return { ...EMPTY_WHATSAPP, routingQuestion, messageTemplate };
+        return { ...EMPTY_WHATSAPP, routingQuestion, messageTemplate, closingMessage };
       }
       // Bots saved before multi-number support only carry `phoneNumber`.
       const destinations = normalizeWhatsAppDestinations(
@@ -196,17 +227,24 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
         destinations,
         routingQuestion,
         messageTemplate,
+        closingMessage,
       };
     })(),
     embed: {
-      apiBaseUrl:
+      apiBaseUrl: healLegacyEmbedUrl(
         typeof embedRaw?.apiBaseUrl === "string"
           ? embedRaw.apiBaseUrl
           : DEFAULT_EMBED.apiBaseUrl,
-      appBaseUrl:
+        LEGACY_EMBED_DEFAULT_URLS.apiBaseUrl,
+        DEFAULT_EMBED.apiBaseUrl,
+      ),
+      appBaseUrl: healLegacyEmbedUrl(
         typeof embedRaw?.appBaseUrl === "string"
           ? embedRaw.appBaseUrl
           : DEFAULT_EMBED.appBaseUrl,
+        LEGACY_EMBED_DEFAULT_URLS.appBaseUrl,
+        DEFAULT_EMBED.appBaseUrl,
+      ),
       scriptPath:
         typeof embedRaw?.scriptPath === "string"
           ? embedRaw.scriptPath
@@ -216,16 +254,24 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
   };
 }
 
-/** Sensible embed defaults pre-filled in the creation form. */
+/**
+ * Sensible embed defaults pre-filled in the creation form. Driven by env so
+ * each deploy points at itself; the fallbacks are the current production
+ * deploys (dashboard on Vercel, API on Render).
+ */
 export const DEFAULT_EMBED = {
-  apiBaseUrl: "https://api.imagin.app",
-  appBaseUrl: "https://app.imagin.app",
+  apiBaseUrl:
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://imagin-v587.onrender.com",
+  appBaseUrl:
+    process.env.NEXT_PUBLIC_APP_BASE_URL ?? "https://imagin-virid.vercel.app",
   scriptPath: "/embed/widget.js",
 };
 
 /** Everything the operator types when registering a new chatbot. */
 export type ChatbotInput = {
   name: string;
+  /** Operational list name; empty string falls back to `name`. */
+  flowName: string;
   clientName: string;
   specialty: string;
   status: ChatbotStatus;
@@ -247,6 +293,8 @@ export type ChatbotInput = {
   /** Question asked before the handoff when there is more than one number. */
   whatsappRoutingQuestion: string;
   whatsappMessageTemplate: string;
+  /** Closing chat bubble before the WhatsApp button; empty uses the tone default. */
+  whatsappClosingMessage: string;
   /** One teaser line per entry; empty entries are dropped on save. */
   launcherTeaserTexts: string[];
   /** Custom avatar URL; null uses the built-in default (upload not wired yet). */
@@ -301,6 +349,7 @@ export function buildChatbot(
   return {
     id,
     name: input.name.trim(),
+    flowName: input.flowName.trim() || undefined,
     clientId: slugify(input.clientName) || `${id}-cliente`,
     clientName: input.clientName.trim(),
     status: input.status,
@@ -324,6 +373,7 @@ export function chatbotToInput(bot: Chatbot): ChatbotInput {
   const safe = normalizeStoredChatbot(bot) ?? bot;
   return {
     name: safe.name,
+    flowName: safe.flowName ?? "",
     clientName: safe.clientName,
     specialty: safe.specialty,
     status: safe.status,
@@ -346,6 +396,7 @@ export function chatbotToInput(bot: Chatbot): ChatbotInput {
     })),
     whatsappRoutingQuestion: safe.whatsapp.routingQuestion,
     whatsappMessageTemplate: safe.whatsapp.messageTemplate,
+    whatsappClosingMessage: safe.whatsapp.closingMessage ?? "",
     launcherTeaserTexts: [...(safe.launcher ?? DEFAULT_LAUNCHER).teaserTexts],
     launcherAvatarUrl: (safe.launcher ?? DEFAULT_LAUNCHER).avatarUrl,
     apiBaseUrl: safe.embed.apiBaseUrl,
@@ -354,11 +405,26 @@ export function chatbotToInput(bot: Chatbot): ChatbotInput {
   };
 }
 
+/**
+ * Form seed for duplicating a bot: the full input of the source bot with
+ * " (cópia)" suffixes on both names, so the operator can adjust everything —
+ * including the client — before saving a brand-new bot (new id/createdAt).
+ */
+export function duplicateChatbotInput(bot: Chatbot): ChatbotInput {
+  const input = chatbotToInput(bot);
+  return {
+    ...input,
+    name: `${input.name} (cópia)`,
+    flowName: `${input.flowName.trim() || input.name} (cópia)`,
+  };
+}
+
 /** Applies form changes while keeping id and createdAt stable (embed URL stays the same). */
 export function updateChatbot(existing: Chatbot, input: ChatbotInput): Chatbot {
   return {
     ...existing,
     name: input.name.trim(),
+    flowName: input.flowName.trim() || undefined,
     clientId: slugify(input.clientName) || existing.clientId,
     clientName: input.clientName.trim(),
     status: input.status,

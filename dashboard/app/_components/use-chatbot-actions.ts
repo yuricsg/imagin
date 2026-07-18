@@ -43,11 +43,13 @@ export function useChatbotActions(serverBots: Chatbot[] = []) {
   }, [serverBots, createdBots, serverBotIds, clientUpdates]);
 
   const create = useCallback(
-    (input: ChatbotInput): Chatbot => {
+    async (input: ChatbotInput): Promise<Chatbot> => {
       const existingIds = new Set(bots.map((bot) => bot.id));
       const bot = buildChatbot(input, existingIds, Date.now());
       saveCreatedBots([...createdBots, bot]);
-      apiCreateChatbot(bot).catch((err) =>
+      // Await persistence so the wizard can show its saving state; API
+      // failures keep the optimistic local bot (previous semantics).
+      await apiCreateChatbot(bot).catch((err) =>
         console.warn("Failed to save bot to API:", err),
       );
       return bot;
@@ -56,7 +58,7 @@ export function useChatbotActions(serverBots: Chatbot[] = []) {
   );
 
   const update = useCallback(
-    (base: Chatbot, input: ChatbotInput): Chatbot => {
+    async (base: Chatbot, input: ChatbotInput): Promise<Chatbot> => {
       const normalized = normalizeStoredChatbot(base) ?? base;
       const updated = updateChatbot(normalized, input);
       const existsLocally = createdBots.some((bot) => bot.id === updated.id);
@@ -66,7 +68,7 @@ export function useChatbotActions(serverBots: Chatbot[] = []) {
           : [...createdBots, updated],
       );
       setClientUpdates((prev) => new Map(prev).set(updated.id, updated));
-      apiUpdateChatbot(updated).catch((err) =>
+      await apiUpdateChatbot(updated).catch((err) =>
         console.warn("Failed to update bot in API:", err),
       );
       return updated;
