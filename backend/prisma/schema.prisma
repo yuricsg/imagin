@@ -6,6 +6,19 @@ datasource db {
   provider = "postgresql"
 }
 
+/// Operators allowed to sign in to the dashboard. Provisioned by the admin
+/// (see `npm run user:add`); there is no self-service registration.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
 model Bot {
   id                    String   @id
   name                  String

@@ -7,6 +7,20 @@ import { createApp } from "./app.js";
 import { FileChatbotRepository } from "./chatbots/file-chatbot-repository.js";
 import { FileLeadRepository } from "./leads/file-lead-repository.js";
 import type { TrackingService } from "./tracking/types.js";
+import type { UserRepository } from "./users/user-repository.js";
+
+/** Accepts only ana@clinica.com / senha123 — stands in for the DB. */
+const fakeUserRepository = {
+  async verifyCredentials(email: string, password: string) {
+    if (email === "ana@clinica.com" && password === "senha123") {
+      return { id: "u1", email, name: "Ana" };
+    }
+    return null;
+  },
+  async upsert() {
+    throw new Error("not used in tests");
+  },
+} as unknown as UserRepository;
 
 const noOpTrackingService: TrackingService = {
   async trackLeadCreated() {
@@ -102,6 +116,42 @@ test("rejects missing required lead fields", async () => {
     assert.equal(response.status, 400);
     assert.ok(body.issues.includes("name is required"));
     assert.ok(body.issues.includes("clientId is required"));
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("auth login returns the user for valid credentials", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-auth-"));
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+      userRepository: fakeUserRepository,
+    });
+
+    const ok = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "ana@clinica.com", password: "senha123" }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).user.email, "ana@clinica.com");
+
+    const wrong = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "ana@clinica.com", password: "errada" }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+    assert.equal(wrong.status, 401);
+
+    const missing = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "ana@clinica.com" }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+    assert.equal(missing.status, 400);
   } finally {
     await rm(tempDir, { force: true, recursive: true });
   }

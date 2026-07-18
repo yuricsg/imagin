@@ -16,12 +16,40 @@ The repository currently contains a Next.js dashboard in `dashboard/` and a Hono
 - Conversation analytics: `chat_sessions` records one access when the lazy iframe opens; `chat_events` records name, intent, answers, completion, WhatsApp click, and confirmed conversion.
 - Attribution: widget captures UTM parameters, click IDs, referrer, page URL, landing page URL, `_fbp`, `_fbc`, and GA client ID from `_ga`.
 - Tracking dispatch: backend can send Meta Conversions API and GA4 Measurement Protocol events after lead creation.
-- Authentication: not configured.
+- Authentication: dashboard access requires sign-in (NextAuth/Auth.js v5). See "Dashboard Authentication" below.
 - Multi-client model: `botId` and `clientId` are accepted, stored, listed, and filterable, but there is no authenticated organization/client model yet.
 - Dashboard reporting: top metrics, lead list, and CSV share the selected chatbot/client/date context. Lead details open in an accessible modal.
 - Real-data rule: dashboard lead loading has no mock fallback. API failure produces an explicit error and an empty list.
 
-The current MVP proves the embed-to-dashboard lead path with a production database. Authentication remains future work. A dialogue builder for new bots is available in the dedicated create/edit wizard pages (`/chatbots/new`, `/chatbots/[botId]/edit`); legacy bots keep their existing runtime.
+The current MVP proves the embed-to-dashboard lead path with a production database. A dialogue builder for new bots is available in the dedicated create/edit wizard pages (`/chatbots/new`, `/chatbots/[botId]/edit`); legacy bots keep their existing runtime.
+
+## Dashboard Authentication
+
+The operator dashboard is gated behind a login. There is no self-service
+registration — an admin provisions accounts directly.
+
+- **Users table** (`users`, backend Prisma): `email` (unique), `passwordHash`
+  (bcrypt), `name`, timestamps. Provision with `npm run user:add -- <email>
+  <senha> ["Nome"]` in `backend/` (re-running resets the password). Passwords
+  are never stored in plaintext.
+- **Credential check**: `POST /api/auth/login` on the Hono backend verifies
+  email + password against the `users` table with bcrypt and returns the user
+  (200) or 401. Only provisioned accounts authenticate.
+- **NextAuth (Auth.js v5)** in the dashboard: a Credentials provider whose
+  `authorize` calls `/api/auth/login`; JWT session strategy (no DB adapter).
+  Config in `dashboard/lib/auth.ts`; route handler at
+  `app/api/auth/[...nextauth]/route.ts`; login page at `/login`.
+- **Route protection**: `dashboard/proxy.ts` (Next.js 16 renamed `middleware`
+  → `proxy`, nodejs runtime) wraps the NextAuth `authorized` callback. Every
+  route redirects to `/login` unless authenticated, **except** the public login
+  page and the chatbot embeds (`/chatbots/[botId]/embed`, `/embed/*`), which run
+  anonymously on clients' sites. Static assets are excluded via the matcher.
+- **Required env** (dashboard): `AUTH_SECRET` (signs the session JWT) and
+  `NEXT_PUBLIC_API_BASE_URL` / `API_BASE_URL` (so `authorize` can reach the
+  backend). See `dashboard/.env.example`.
+
+Hardening (rate limiting, refresh tokens, an admin UI for user management) is
+deliberately deferred; the current model is admin-provisioned credentials only.
 
 ## Product Goal
 

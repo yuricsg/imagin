@@ -14,6 +14,7 @@ import {
   type ConversationRepository,
 } from "./conversations/types.js";
 import { getPrisma } from "./db.js";
+import { UserRepository } from "./users/user-repository.js";
 import {
   buildLeadRecordInput,
   leadToDto,
@@ -32,6 +33,7 @@ export type AppOptions = {
   leadRepository?: LeadRepository;
   trackingService?: TrackingService;
   conversationRepository?: ConversationRepository;
+  userRepository?: UserRepository;
   corsOrigins?: string[];
   conversionWebhookSecret?: string;
 };
@@ -56,6 +58,9 @@ export function createApp(options: AppOptions = {}) {
     (prisma
       ? new PrismaConversationRepository(prisma)
       : new MemoryConversationRepository());
+  const userRepository =
+    options.userRepository ??
+    (prisma ? new UserRepository(prisma) : null);
   const corsOrigins = options.corsOrigins ?? readCorsOrigins();
   const trackingService = options.trackingService ?? createTrackingService();
   const app = new Hono();
@@ -85,6 +90,36 @@ export function createApp(options: AppOptions = {}) {
 
   app.get("/health", (c) => {
     return c.json({ status: "ok" });
+  });
+
+  // Credential check for the dashboard's NextAuth Credentials provider. Called
+  // server-to-server by Next.js — returns the user on success, 401 otherwise.
+  app.post("/api/auth/login", async (c) => {
+    if (!userRepository) {
+      return c.json({ error: "auth is not configured" }, 503);
+    }
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "invalid JSON body" }, 400);
+    }
+    const email =
+      typeof (body as Record<string, unknown>)?.email === "string"
+        ? ((body as Record<string, unknown>).email as string)
+        : "";
+    const password =
+      typeof (body as Record<string, unknown>)?.password === "string"
+        ? ((body as Record<string, unknown>).password as string)
+        : "";
+    if (!email || !password) {
+      return c.json({ error: "email and password are required" }, 400);
+    }
+    const user = await userRepository.verifyCredentials(email, password);
+    if (!user) {
+      return c.json({ error: "invalid credentials" }, 401);
+    }
+    return c.json({ user });
   });
 
   app.get("/api/public/chatbots/:botId/config", async (c) => {
