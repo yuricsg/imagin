@@ -1,10 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { ChatAccess, Chatbot, Lead } from "@/lib/chatbots/types";
 import { ACCENTS } from "@/lib/chatbots/accents";
+import {
+  getCreatedBots,
+  getServerCreatedBots,
+  subscribeCreatedBots,
+} from "@/lib/chatbots/create";
 import { computeMetrics } from "@/lib/metrics";
 import { percentPrecise } from "@/lib/format";
 import {
@@ -37,6 +42,80 @@ const dayFmt = new Intl.DateTimeFormat("pt-BR", {
 function formatDay(key: string): string {
   const [year, month, day] = key.split("-").map(Number);
   return dayFmt.format(new Date(year, month - 1, day));
+}
+
+/**
+ * Resolves the bot before rendering the report. Bots created through the
+ * dashboard may live only in the browser's localStorage (their DB write never
+ * persisted), so the server-rendered `serverBots` list can miss them — the same
+ * reason the home list merges both sources. We fall back to localStorage so a
+ * bot visible in the list never 404s on its own metrics page.
+ */
+export function BotReportClient({
+  botId,
+  serverBots,
+  leads,
+  accesses,
+  nowMs,
+}: {
+  botId: string;
+  serverBots: Chatbot[];
+  leads: Lead[];
+  accesses: ChatAccess[];
+  nowMs: number;
+}) {
+  const createdBots = useSyncExternalStore(
+    subscribeCreatedBots,
+    getCreatedBots,
+    getServerCreatedBots,
+  );
+
+  const bot =
+    serverBots.find((entry) => entry.id === botId) ??
+    createdBots.find((entry) => entry.id === botId) ??
+    null;
+
+  // First paint is server HTML (localStorage unread yet). Wait for the store to
+  // hydrate before deciding a localStorage-only bot is truly missing.
+  const hydrated = useSyncExternalStore(
+    subscribeCreatedBots,
+    () => true,
+    () => false,
+  );
+
+  if (!bot) {
+    if (!hydrated) {
+      return (
+        <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Carregando desempenho…
+          </p>
+        </main>
+      );
+    }
+    return (
+      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+          Chatbot não encontrado
+        </h1>
+        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+          Esse bot não está na sua lista. Volte ao painel e tente de novo.
+        </p>
+        <Link href="/" className="btn-brand mt-4 inline-flex px-4 py-2">
+          Voltar ao painel
+        </Link>
+      </main>
+    );
+  }
+
+  return (
+    <BotReport
+      bot={bot}
+      leads={leads.filter((lead) => lead.botId === bot.id)}
+      accesses={accesses.filter((access) => access.botId === bot.id)}
+      nowMs={nowMs}
+    />
+  );
 }
 
 export function BotReport({
