@@ -4,6 +4,13 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Chatbot, Lead, LeadEvent } from "@/lib/chatbots/types";
 import { absoluteTime } from "@/lib/format";
+import { chatbotDisplayName } from "@/lib/chatbots/display";
+import {
+  getDialogueStep,
+  labelForSaveAs,
+  resolveAnswerLabels,
+  resolveStepSaveAs,
+} from "@/lib/chatbots/flows";
 import { LEAD_CHANNEL, LEAD_STATUS } from "@/lib/labels";
 import { Badge } from "./ui";
 import { IconX } from "./icons";
@@ -32,7 +39,24 @@ export function LeadDetailsModal({
 
   const status = LEAD_STATUS[lead.status];
   const channel = LEAD_CHANNEL[lead.attribution.channel];
-  const answers = Object.entries(lead.answers ?? {});
+  const dialogue = bot?.flow.dialogue;
+  // Answers persist option ids for branching — resolve them back to the labels
+  // the visitor saw, and name each entry after its question/save category.
+  const answers = Object.entries(lead.answers ?? {}).map(([key, value]) => {
+    const step = dialogue ? getDialogueStep(dialogue, key) : undefined;
+    const saveAs = step ? resolveStepSaveAs(step) : undefined;
+    const label = step
+      ? (saveAs ? labelForSaveAs(saveAs, dialogue?.customSaveLabels) : "") ||
+        step.question.trim() ||
+        key
+      : key;
+    const resolved = step ? resolveAnswerLabels(step, value) : value;
+    return {
+      key,
+      label,
+      value: Array.isArray(resolved) ? resolved.join(", ") : resolved,
+    };
+  });
 
   return createPortal(
     <div
@@ -56,7 +80,7 @@ export function LeadDetailsModal({
               <Badge label={status.label} className={status.badge} dot={status.dot} />
             </div>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              {bot?.name ?? lead.botId} · {absoluteTime(lead.createdAt)}
+              {bot ? chatbotDisplayName(bot) : lead.botId} · {absoluteTime(lead.createdAt)}
             </p>
           </div>
           <button
@@ -113,8 +137,8 @@ export function LeadDetailsModal({
               {lead.selectedExams.length > 0 ? (
                 <Detail label="Exames" value={lead.selectedExams.join(", ")} />
               ) : null}
-              {answers.map(([key, value]) => (
-                <Detail key={key} label={key} value={Array.isArray(value) ? value.join(", ") : value} />
+              {answers.map((answer) => (
+                <Detail key={answer.key} label={answer.label} value={answer.value} />
               ))}
             </dl>
             {lead.whatsappMessage ? (

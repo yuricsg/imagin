@@ -1,5 +1,6 @@
 import type { Chatbot, Lead } from "@/lib/chatbots/types";
 import { ACCENTS } from "@/lib/chatbots/accents";
+import { chatbotDisplayName } from "@/lib/chatbots/display";
 import { LEAD_CHANNEL, LEAD_STATUS } from "@/lib/labels";
 import { absoluteTime, relativeTime } from "@/lib/format";
 import { Avatar, Badge } from "./ui";
@@ -101,7 +102,7 @@ export function LeadsTable({
                         <span className={`size-2.5 shrink-0 rounded-full ring-2 ring-white dark:ring-zinc-900 ${ACCENTS[bot.accent].dot}`} />
                         <div className="min-w-0">
                           <p className="truncate text-sm text-zinc-700 dark:text-zinc-200">
-                            {bot.name}
+                            {chatbotDisplayName(bot)}
                           </p>
                           <p className="truncate text-xs text-zinc-400 dark:text-zinc-500">
                             {bot.clientName}

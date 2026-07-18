@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Chatbot, Client, LeadStatus } from "@/lib/chatbots/types";
 import type { DateRange } from "@/lib/lead-report";
+import { chatbotDisplayName } from "@/lib/chatbots/display";
 import { LEAD_STATUS, LEAD_STATUS_ORDER } from "@/lib/labels";
 import { IconChevronDown, IconDownload, IconSearch, IconX } from "./icons";
 
@@ -82,7 +83,7 @@ export function LeadsToolbar({
           <Select label="Filtrar por chatbot" value={botId} onChange={onBot}>
             <option value="all">Todos os chatbots</option>
             {bots.map((bot) => (
-              <option key={bot.id} value={bot.id}>{bot.name}</option>
+              <option key={bot.id} value={bot.id}>{chatbotDisplayName(bot)}</option>
             ))}
           </Select>
           <Select label="Filtrar por cliente" value={clientId} onChange={onClient}>

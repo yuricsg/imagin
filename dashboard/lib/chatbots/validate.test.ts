@@ -79,8 +79,8 @@ describe("validateChatbotInput", () => {
     });
 
     expect(errors).toEqual({
-      apiBaseUrl: "Use uma URL completa, ex.: https://api.imagin.app",
-      appBaseUrl: "Use uma URL completa, ex.: https://app.imagin.app",
+      apiBaseUrl: `Use uma URL completa, ex.: ${DEFAULT_EMBED.apiBaseUrl}`,
+      appBaseUrl: `Use uma URL completa, ex.: ${DEFAULT_EMBED.appBaseUrl}`,
     });
   });
 

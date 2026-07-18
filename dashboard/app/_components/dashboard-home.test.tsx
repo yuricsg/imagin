@@ -195,6 +195,115 @@ describe("DashboardHome — navegação do wizard", () => {
     expect(pushMock).toHaveBeenCalledWith("/chatbots/legacy-bot/edit");
   });
 
+  it("navigates to the duplication page for a local bot", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "imagin:chatbots",
+      JSON.stringify([
+        {
+          id: "dr-caio-costa",
+          name: "Dr. Caio Costa",
+          clientId: "clinica-costa",
+          clientName: "Clínica Costa",
+          status: "active",
+          specialty: "Ortopedia",
+          accent: "indigo",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          embed: {
+            apiBaseUrl: "https://api.imagin.app",
+            appBaseUrl: "https://app.imagin.app",
+            scriptPath: "/embed/widget.js",
+          },
+          flow: {
+            templateId: "patient-capture",
+            tone: "friendly",
+            greeting: "",
+            collectFields: ["name", "phone"],
+            services: [],
+            insuranceMode: "both",
+            insurances: [],
+          },
+          tracking: { gaMeasurementId: "", metaPixelId: "" },
+          whatsapp: {
+            enabled: false,
+            phoneNumber: "",
+            messageTemplate: "",
+          },
+        },
+      ]),
+    );
+
+    render(<DashboardHome data={makeData()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: /Duplicar Dr\. Caio Costa/i }),
+    );
+
+    expect(pushMock).toHaveBeenCalledWith("/chatbots/new?from=dr-caio-costa");
+  });
+
+  it("shows the flow name as the list title, falling back to the bot name", async () => {
+    const user = userEvent.setup();
+    const baseBot = {
+      clientId: "clinica-costa",
+      clientName: "Clínica Costa",
+      status: "active",
+      specialty: "Ortopedia",
+      accent: "indigo",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      embed: {
+        apiBaseUrl: "https://api.imagin.app",
+        appBaseUrl: "https://app.imagin.app",
+        scriptPath: "/embed/widget.js",
+      },
+      flow: {
+        templateId: "patient-capture",
+        tone: "friendly",
+        greeting: "",
+        collectFields: ["name", "phone"],
+        services: [],
+        insuranceMode: "both",
+        insurances: [],
+      },
+      tracking: { gaMeasurementId: "", metaPixelId: "" },
+      whatsapp: {
+        enabled: false,
+        phoneNumber: "",
+        messageTemplate: "",
+      },
+    };
+    window.localStorage.setItem(
+      "imagin:chatbots",
+      JSON.stringify([
+        { ...baseBot, id: "bot-com-fluxo", name: "Assistente", flowName: "Fluxo LP Cardio" },
+        { ...baseBot, id: "bot-sem-fluxo", name: "Dr. Sem Fluxo" },
+      ]),
+    );
+
+    render(<DashboardHome data={makeData()} />);
+
+    // The flow name drives the list title and every aria-label.
+    expect(
+      screen.getByRole("button", { name: "Fluxo LP Cardio, Clínica Costa" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Editar Fluxo LP Cardio" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Duplicar Fluxo LP Cardio" }),
+    ).toBeInTheDocument();
+    // Bots without flowName fall back to the visitor-facing name.
+    expect(
+      screen.getByRole("button", { name: "Dr. Sem Fluxo, Clínica Costa" }),
+    ).toBeInTheDocument();
+
+    // Selecting the bot also shows the flow name in the leads context.
+    await user.click(
+      screen.getByRole("button", { name: "Fluxo LP Cardio, Clínica Costa" }),
+    );
+    expect(screen.getByText(/filtrando por Fluxo LP Cardio/)).toBeInTheDocument();
+  });
+
   it("deletes a created bot after confirmation", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
@@ -327,5 +436,84 @@ describe("DashboardHome — funil real", () => {
     render(<DashboardHome data={makeData({ dataError: "API indisponível." })} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Nenhum dado fictício");
     expect(screen.queryByText("Camila Andrade")).not.toBeInTheDocument();
+  });
+});
+
+describe("DashboardHome — respostas do diálogo no modal do lead", () => {
+  const dialogueBot: Chatbot = {
+    ...chatbotCatalog[0],
+    id: "ana-assistente-virtual",
+    name: "Ana - Assistente virtual",
+    flow: {
+      ...chatbotCatalog[0].flow,
+      dialogue: {
+        version: 1,
+        shape: "linear",
+        greeting: "",
+        startStepId: "step-exames",
+        steps: [
+          {
+            id: "step-exames",
+            question: "Quais exames você deseja agendar?",
+            inputType: "multi_choice",
+            saveAs: "exame",
+            options: [
+              { id: "opt-mrnnzskh-62", label: "Parecer cardiológico - pré operatório" },
+              { id: "opt-mrnnzpxc-61", label: "Teste ergométrico" },
+            ],
+          },
+          {
+            id: "step-solicitacao",
+            question: "Possui solicitação médica?",
+            inputType: "single_choice",
+            saveAs: "solicitacao",
+            options: [
+              { id: "opt-mrno0ong-67", label: "Sim" },
+              { id: "opt-nao", label: "Não" },
+            ],
+          },
+        ],
+        customSaveLabels: { exame: "Exame", solicitacao: "Solicitação" },
+      },
+    },
+  };
+
+  it("shows option labels instead of internal ids", async () => {
+    const user = userEvent.setup();
+    const lead = makeLead({
+      botId: dialogueBot.id,
+      medicalRequestStatus: null,
+      answers: {
+        "step-exames": ["opt-mrnnzskh-62", "opt-mrnnzpxc-61"],
+        "step-solicitacao": "opt-mrno0ong-67",
+      },
+    });
+    render(
+      <DashboardHome
+        data={makeData({
+          bots: [dialogueBot],
+          leads: [lead],
+          botActivity: Object.fromEntries(computeBotActivity([lead])),
+        })}
+      />,
+    );
+
+    await user.click(screen.getAllByRole("button", { name: "Maria Real" })[0]);
+    const modal = screen.getByRole("dialog", { name: "Maria Real" });
+
+    // Values show what the visitor picked — never internal option ids.
+    expect(
+      within(modal).getByText(
+        "Parecer cardiológico - pré operatório, Teste ergométrico",
+      ),
+    ).toBeInTheDocument();
+    expect(within(modal).getByText("Sim")).toBeInTheDocument();
+    expect(
+      within(modal).queryByText(/opt-mrnnzskh-62|opt-mrnnzpxc-61|opt-mrno0ong-67/),
+    ).not.toBeInTheDocument();
+    // Entries are named after their save categories, not raw step ids.
+    expect(within(modal).getByText("Exame")).toBeInTheDocument();
+    expect(within(modal).getByText("Solicitação")).toBeInTheDocument();
+    expect(within(modal).queryByText("step-exames")).not.toBeInTheDocument();
   });
 });

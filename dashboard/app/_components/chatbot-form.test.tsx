@@ -7,7 +7,16 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatbotInput } from "@/lib/chatbots/create";
-import { buildChatbot } from "@/lib/chatbots/create";
+import { buildChatbot, DEFAULT_EMBED } from "@/lib/chatbots/create";
+import {
+  defaultFlowForTemplate,
+  FLOW_END_NO_WHATSAPP,
+  seedDialogueFromTemplate,
+} from "@/lib/chatbots/flows";
+import {
+  DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  DEFAULT_WHATSAPP_ROUTING_QUESTION,
+} from "@/lib/chatbots/whatsapp";
 import { ChatbotForm } from "./chatbot-form";
 
 afterEach(() => {
@@ -146,7 +155,7 @@ describe("ChatbotForm (wizard)", () => {
 
     expect(
       await screen.findByText(
-        "Use uma URL completa, ex.: https://api.imagin.app",
+        `Use uma URL completa, ex.: ${DEFAULT_EMBED.apiBaseUrl}`,
       ),
     ).toBeInTheDocument();
     expect(onCreate).not.toHaveBeenCalled();
@@ -338,5 +347,257 @@ describe("ChatbotForm (wizard)", () => {
     expect(
       screen.getByRole("button", { name: /Robô feminino/i }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+/** Full input fixture used to build a realistic source bot for duplication. */
+function sourceInput(): ChatbotInput {
+  const flow = defaultFlowForTemplate("patient-capture");
+  return {
+    name: "Dra. Origem",
+    flowName: "Fluxo Origem",
+    clientName: "Clínica Origem",
+    specialty: "Cardiologia",
+    status: "active",
+    accent: "indigo",
+    flowTemplateId: flow.templateId,
+    flowTone: flow.tone,
+    flowGreeting: flow.greeting,
+    flowCollectFields: flow.collectFields,
+    flowServices: flow.services,
+    flowInsuranceMode: flow.insuranceMode,
+    flowInsurances: flow.insurances,
+    gaMeasurementId: "",
+    metaPixelId: "",
+    whatsappEnabled: false,
+    whatsappDestinations: [],
+    whatsappRoutingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
+    whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+    whatsappClosingMessage: "",
+    launcherTeaserTexts: ["Olá! Posso te ajudar?"],
+    launcherAvatarUrl: null,
+    ...DEFAULT_EMBED,
+  };
+}
+
+describe("ChatbotForm — nome do fluxo e duplicação", () => {
+  it("submits the optional flow name for a new bot", async () => {
+    const user = userEvent.setup();
+    const onCreate = createStub();
+
+    render(<ChatbotForm onClose={vi.fn()} onCreate={onCreate} />);
+
+    expect(screen.getByLabelText(/Nome do fluxo/i)).toHaveValue("");
+
+    await fillStepOne(user);
+    await user.type(
+      screen.getByLabelText(/Nome do fluxo/i),
+      "Fluxo de exames — LP",
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    // Review step echoes the flow name next to the chatbot name.
+    expect(screen.getByText("Fluxo de exames — LP")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Criar chatbot" }));
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Dra. Ana",
+          flowName: "Fluxo de exames — LP",
+        }),
+      );
+    });
+  });
+
+  it("prefills creation mode from the duplicated bot with (cópia) suffixes", async () => {
+    const user = userEvent.setup();
+    const onCreate = createStub();
+    const onUpdate = vi.fn();
+    const source = buildChatbot(
+      {
+        ...sourceInput(),
+        flowDialogue: seedDialogueFromTemplate("patient-capture"),
+      },
+      new Set(),
+      1_700_000_000_000,
+    );
+
+    render(
+      <ChatbotForm
+        onClose={vi.fn()}
+        onCreate={onCreate}
+        onUpdate={onUpdate}
+        duplicateFrom={source}
+      />,
+    );
+
+    // Creation mode (not edit), both names suffixed.
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Novo chatbot" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nome do chatbot/i)).toHaveValue(
+      "Dra. Origem (cópia)",
+    );
+    expect(screen.getByLabelText(/Nome do fluxo/i)).toHaveValue(
+      "Fluxo Origem (cópia)",
+    );
+
+    // Everything stays editable before saving, including the client.
+    const clientInput = screen.getByLabelText(/^Cliente/i);
+    expect(clientInput).toHaveValue("Clínica Origem");
+    await user.clear(clientInput);
+    await user.type(clientInput, "Clínica Nova");
+
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Criar chatbot" }));
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Dra. Origem (cópia)",
+          flowName: "Fluxo Origem (cópia)",
+          clientName: "Clínica Nova",
+          specialty: "Cardiologia",
+          flowTemplateId: "patient-capture",
+          flowDialogue: expect.objectContaining({
+            version: 1,
+            steps: expect.any(Array),
+          }),
+        }),
+      );
+    });
+    // Duplication creates a new bot — never an update of the source.
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the bot name for the duplicated flow name", () => {
+    const source = buildChatbot(
+      { ...sourceInput(), flowName: "" },
+      new Set(),
+      1_700_000_000_000,
+    );
+
+    render(
+      <ChatbotForm
+        onClose={vi.fn()}
+        onCreate={createStub()}
+        duplicateFrom={source}
+      />,
+    );
+
+    expect(screen.getByLabelText(/Nome do fluxo/i)).toHaveValue(
+      "Dra. Origem (cópia)",
+    );
+  });
+});
+
+describe("ChatbotForm — mensagem de encerramento do WhatsApp", () => {
+  async function goToWhatsAppStep(user: ReturnType<typeof userEvent.setup>) {
+    await fillStepOne(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Ativado" }));
+  }
+
+  it("submits the custom closing message typed on the WhatsApp step", async () => {
+    const user = userEvent.setup();
+    const onCreate = createStub();
+
+    render(<ChatbotForm onClose={vi.fn()} onCreate={onCreate} />);
+
+    await goToWhatsAppStep(user);
+    await user.type(
+      screen.getByLabelText(/Número do WhatsApp/i),
+      "+55 11 98888-7777",
+    );
+
+    const closing = screen.getByLabelText(/Mensagem de encerramento do chat/i);
+    // Friendly tone is the default: the placeholder shows the tone fallback.
+    expect(closing).toHaveValue("");
+    expect(closing).toHaveAttribute(
+      "placeholder",
+      "Continue no WhatsApp para falar com nossa equipe.",
+    );
+
+    await user.type(closing, "Envie a mensagem para garantir seu horário.");
+
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Criar chatbot" }));
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          whatsappEnabled: true,
+          whatsappClosingMessage: "Envie a mensagem para garantir seu horário.",
+        }),
+      );
+    });
+  });
+
+  it("follows the tone in the placeholder but never overwrites typed text", async () => {
+    const user = userEvent.setup();
+
+    render(<ChatbotForm onClose={vi.fn()} onCreate={createStub()} />);
+
+    await fillStepOne(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    // Switch to the formal tone on the conversation step.
+    await user.click(screen.getByRole("button", { name: "Formal" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Ativado" }));
+
+    const closing = screen.getByLabelText(/Mensagem de encerramento do chat/i);
+    expect(closing).toHaveAttribute(
+      "placeholder",
+      "Continue o atendimento pelo WhatsApp para confirmar os detalhes.",
+    );
+
+    await user.type(closing, "Texto manual do operador.");
+
+    // Back to the conversation step, switch tone again — operator text stays.
+    await user.click(screen.getByRole("button", { name: "Voltar" }));
+    await user.click(screen.getByRole("button", { name: "Amigável" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(
+      screen.getByLabelText(/Mensagem de encerramento do chat/i),
+    ).toHaveValue("Texto manual do operador.");
+  });
+});
+
+describe("ChatbotForm — destino das opções (encerramento)", () => {
+  it("offers both ending types in the option destination dropdown", async () => {
+    const user = userEvent.setup();
+
+    render(<ChatbotForm onClose={vi.fn()} onCreate={createStub()} />);
+    await fillStepOne(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await user.click(screen.getByRole("button", { name: /Com ramificações/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /Entendi, continuar/i }),
+    );
+
+    const destination = screen.getAllByLabelText("Próxima etapa")[0];
+    const labels = Array.from(destination.querySelectorAll("option")).map(
+      (option) => option.textContent,
+    );
+    expect(labels).toContain("Encerrar e direcionar ao WhatsApp");
+    expect(labels).toContain("Encerrar conversa (sem WhatsApp)");
+
+    // The polite ending stores the sentinel; "" stays the WhatsApp handoff.
+    await user.selectOptions(destination, FLOW_END_NO_WHATSAPP);
+    expect(destination).toHaveValue(FLOW_END_NO_WHATSAPP);
+    await user.selectOptions(destination, "");
+    expect(destination).toHaveValue("");
   });
 });

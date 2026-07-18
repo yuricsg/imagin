@@ -6,9 +6,10 @@ import type { BotActivity } from "@/lib/metrics";
 import { ACCENTS } from "@/lib/chatbots/accents";
 import { BOT_STATUS } from "@/lib/labels";
 import { relativeTime } from "@/lib/format";
+import { chatbotDisplayName } from "@/lib/chatbots/display";
 import { resolveLauncherAvatarPath } from "@/lib/chatbots/launcher";
 import { Avatar, Badge, EmptyState } from "./ui";
-import { IconBot, IconPencil, IconPlus, IconTrash, IconX } from "./icons";
+import { IconBot, IconCopy, IconPencil, IconPlus, IconTrash, IconX } from "./icons";
 
 export function ChatbotList({
   bots,
@@ -18,6 +19,7 @@ export function ChatbotList({
   onSelect,
   onCreate,
   onEdit,
+  onDuplicate,
   onDelete,
   nowMs,
 }: {
@@ -28,6 +30,7 @@ export function ChatbotList({
   onSelect: (id: string | null) => void;
   onCreate?: () => void;
   onEdit?: (bot: Chatbot) => void;
+  onDuplicate?: (bot: Chatbot) => void;
   onDelete?: (id: string) => void;
   nowMs: number;
 }) {
@@ -83,6 +86,7 @@ export function ChatbotList({
             const stats = activity[bot.id];
             const selected = bot.id === selectedBotId;
             const editable = editableBotIds.has(bot.id);
+            const displayName = chatbotDisplayName(bot);
             const accent = ACCENTS[bot.accent];
             const status = BOT_STATUS[bot.status];
             const metaClass = selected
@@ -97,7 +101,7 @@ export function ChatbotList({
                   type="button"
                   onClick={() => onSelect(selected ? null : bot.id)}
                   aria-pressed={selected}
-                  aria-label={`${bot.name}, ${bot.clientName}`}
+                  aria-label={`${displayName}, ${bot.clientName}`}
                   className={`relative flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150 ${
                     selected
                       ? `${accent.surface} ring-1 ring-inset ${accent.ring}`
@@ -105,14 +109,14 @@ export function ChatbotList({
                   }`}
                 >
                   <Avatar
-                    name={bot.name}
+                    name={displayName}
                     className={accent.avatar}
                     imageSrc={resolveLauncherAvatarPath(bot.launcher?.avatarUrl)}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {bot.name}
+                        {displayName}
                       </p>
                       <span
                         className={`size-2 shrink-0 rounded-full ring-2 ring-white dark:ring-zinc-900 ${status.dot}`}
@@ -143,7 +147,7 @@ export function ChatbotList({
                     </div>
                   </div>
                 </button>
-                {editable && (onEdit || onDelete) ? (
+                {editable && (onEdit || onDuplicate || onDelete) ? (
                   <div
                     className={`flex shrink-0 flex-col justify-center gap-0.5 pr-1 transition-opacity ${
                       selected
@@ -155,17 +159,27 @@ export function ChatbotList({
                       <button
                         type="button"
                         onClick={() => onEdit(bot)}
-                        aria-label={`Editar ${bot.name}`}
+                        aria-label={`Editar ${displayName}`}
                         className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-indigo-400"
                       >
                         <IconPencil className="size-3.5" />
+                      </button>
+                    ) : null}
+                    {onDuplicate ? (
+                      <button
+                        type="button"
+                        onClick={() => onDuplicate(bot)}
+                        aria-label={`Duplicar ${displayName}`}
+                        className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-emerald-400"
+                      >
+                        <IconCopy className="size-3.5" />
                       </button>
                     ) : null}
                     {onDelete ? (
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteId(bot.id)}
-                        aria-label={`Excluir ${bot.name}`}
+                        aria-label={`Excluir ${displayName}`}
                         className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
                       >
                         <IconTrash className="size-3.5" />
@@ -206,7 +220,7 @@ export function ChatbotList({
                   className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400"
                 >
                   <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                    {confirmBot.name}
+                    {chatbotDisplayName(confirmBot)}
                   </span>{" "}
                   será removido da sua lista. O código de instalação deixa de
                   funcionar até você criar um novo bot.

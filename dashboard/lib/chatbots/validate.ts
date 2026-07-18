@@ -1,4 +1,5 @@
 import type { ChatbotInput } from "./create";
+import { DEFAULT_EMBED } from "./create";
 import { FLOW_TEMPLATES, validateDialogueFlow } from "./flows";
 import { isValidGaMeasurementId, isValidMetaPixelId } from "./tracking";
 import { isValidWhatsAppPhone, normalizeWhatsAppPhone } from "./whatsapp";
@@ -127,14 +128,14 @@ export function validateChatbotInput(input: ChatbotInput): ChatbotFieldErrors | 
   if (!apiBaseUrl) {
     errors.apiBaseUrl = "Informe a URL base da API.";
   } else if (!isHttpUrl(apiBaseUrl)) {
-    errors.apiBaseUrl = "Use uma URL completa, ex.: https://api.imagin.app";
+    errors.apiBaseUrl = `Use uma URL completa, ex.: ${DEFAULT_EMBED.apiBaseUrl}`;
   }
 
   const appBaseUrl = input.appBaseUrl.trim();
   if (!appBaseUrl) {
     errors.appBaseUrl = "Informe a URL base do app.";
   } else if (!isHttpUrl(appBaseUrl)) {
-    errors.appBaseUrl = "Use uma URL completa, ex.: https://app.imagin.app";
+    errors.appBaseUrl = `Use uma URL completa, ex.: ${DEFAULT_EMBED.appBaseUrl}`;
   }
 
   const scriptPath = input.scriptPath.trim();

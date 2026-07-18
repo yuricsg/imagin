@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Chatbot } from "@/lib/chatbots/types";
 import {
   extractLeadFieldsFromAnswers,
+  farewellMessageForTone,
   getDialogueStep,
   hasCustomDialogue,
+  isFarewellEnding,
   resolveGreeting,
   resolveNextStepId,
   resolveStepSaveAs,
@@ -13,6 +15,7 @@ import {
   type FlowStep,
 } from "@/lib/chatbots/flows";
 import {
+  DEFAULT_WHATSAPP_CLOSING_MESSAGES,
   DEFAULT_WHATSAPP_ROUTING_QUESTION,
   needsWhatsAppRouting,
   resolveWhatsAppMessage,
@@ -276,28 +279,7 @@ export function CustomDialogueChat({
         });
       }
       setIsSubmitting(false);
-      const isFormalTone = bot.flow.tone === "formal";
-      const office = chosen?.label;
-      const handoff = isFormalTone
-        ? office
-          ? `Continue o atendimento pelo WhatsApp do ${office} para confirmar os detalhes.`
-          : "Continue o atendimento pelo WhatsApp para confirmar os detalhes."
-        : office
-          ? `Continue no WhatsApp para falar com a equipe do ${office}.`
-          : "Continue no WhatsApp para falar com nossa equipe.";
-      const closing = isFormalTone
-        ? [
-            "Obrigado. Suas informações foram registradas. 🙏",
-            bot.whatsapp.enabled
-              ? handoff
-              : "Nossa equipe entrará em contato em breve.",
-          ]
-        : [
-            "Prontinho! Já recebemos seus dados. 🙏",
-            bot.whatsapp.enabled
-              ? handoff
-              : "Nossa equipe entrará em contato em breve para dar sequência.",
-          ];
+      const closing = resolveClosingLines(bot, chosen);
       await playBotMessages(closing, () => setUiStep("complete"));
     } catch (caught) {
       setError(
@@ -338,6 +320,26 @@ export function CustomDialogueChat({
     void finishFlow(answers, chosen);
   }
 
+  /**
+   * Polite ending without the WhatsApp handoff: no lead is created, no closing
+   * bubbles and no CTA — just the tone-aware goodbye. The visitor's last answer
+   * was already tracked in advance(); when its label reads as no-interest, the
+   * backend derives `not_interested` from it (see isNotInterestedText there).
+   */
+  async function endWithFarewell() {
+    if (!preview) {
+      // Honest audit trail: the flow did complete, just without a handoff.
+      // flowCompletedAt does not outrank notInterestedAt in status derivation.
+      await sessionTracker.trackEvent({
+        type: "flow_completed",
+        flowMode: "custom_dialogue",
+      });
+    }
+    await playBotMessages([farewellMessageForTone(bot.flow.tone)], () =>
+      setUiStep("complete"),
+    );
+  }
+
   function advance(step: FlowStep, answer: string | string[], display: string) {
     addMessage("user", display);
     void sessionTracker.trackEvent({
@@ -361,6 +363,10 @@ export function CustomDialogueChat({
     setMultiSelected([]);
 
     const nextId = resolveNextStepId(dialogue, step.id, answer);
+    if (isFarewellEnding(nextId ?? undefined)) {
+      void endWithFarewell();
+      return;
+    }
     const nextStep = nextId ? getDialogueStep(dialogue, nextId) : null;
     if (!nextId || !nextStep) {
       endDialogue(nextAnswers);
@@ -579,6 +585,43 @@ export function CustomDialogueChat({
 }
 
 type LeadFields = ReturnType<typeof extractLeadFieldsFromAnswers>;
+
+/**
+ * Closing bubbles after the flow finishes: a confirmation line plus, when
+ * WhatsApp is enabled, the directional line. A custom
+ * `whatsapp.closingMessage` always wins over the tone default — operator text
+ * is never rewritten by tone changes.
+ */
+export function resolveClosingLines(
+  bot: Chatbot,
+  chosen: WhatsAppDestination | null,
+): string[] {
+  const isFormalTone = bot.flow.tone === "formal";
+  const office = chosen?.label;
+  const customClosing = bot.whatsapp.closingMessage?.trim();
+  const handoff =
+    customClosing ||
+    (isFormalTone
+      ? office
+        ? `Continue o atendimento pelo WhatsApp do ${office} para confirmar os detalhes.`
+        : DEFAULT_WHATSAPP_CLOSING_MESSAGES.formal
+      : office
+        ? `Continue no WhatsApp para falar com a equipe do ${office}.`
+        : DEFAULT_WHATSAPP_CLOSING_MESSAGES.friendly);
+  return isFormalTone
+    ? [
+        "Obrigado. Suas informações foram registradas. 🙏",
+        bot.whatsapp.enabled
+          ? handoff
+          : "Nossa equipe entrará em contato em breve.",
+      ]
+    : [
+        "Prontinho! Já recebemos seus dados. 🙏",
+        bot.whatsapp.enabled
+          ? handoff
+          : "Nossa equipe entrará em contato em breve para dar sequência.",
+      ];
+}
 
 /**
  * Rebuilds the handoff the backend would produce, but entirely client-side, so

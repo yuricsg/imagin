@@ -42,6 +42,7 @@ describe("whatsapp", () => {
         ],
         whatsappRoutingQuestion: "",
         whatsappMessageTemplate: "Oi {nome}",
+        whatsappClosingMessage: "",
       }),
     ).toEqual({
       enabled: false,
@@ -61,6 +62,7 @@ describe("whatsapp", () => {
         ],
         whatsappRoutingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
         whatsappMessageTemplate: "",
+        whatsappClosingMessage: "",
       }),
     ).toEqual({
       enabled: true,
@@ -69,6 +71,28 @@ describe("whatsapp", () => {
       routingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
       messageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
     });
+  });
+
+  it("keeps a custom closing message and drops a blank one", () => {
+    const base = {
+      whatsappEnabled: true,
+      whatsappDestinations: [
+        { id: "a", label: "", phoneNumber: "+55 11 98888-7777" },
+      ],
+      whatsappRoutingQuestion: "",
+      whatsappMessageTemplate: "",
+    };
+
+    expect(
+      buildWhatsAppFromInput({
+        ...base,
+        whatsappClosingMessage: "  Envie a mensagem para ser atendido(a).  ",
+      }).closingMessage,
+    ).toBe("Envie a mensagem para ser atendido(a).");
+    expect(
+      buildWhatsAppFromInput({ ...base, whatsappClosingMessage: "   " })
+        .closingMessage,
+    ).toBeUndefined();
   });
 
   it("keeps every destination and mirrors the first one as phoneNumber", () => {
@@ -81,6 +105,7 @@ describe("whatsapp", () => {
       ],
       whatsappRoutingQuestion: "  Qual unidade?  ",
       whatsappMessageTemplate: "Oi",
+      whatsappClosingMessage: "",
     });
 
     expect(config.destinations).toEqual([

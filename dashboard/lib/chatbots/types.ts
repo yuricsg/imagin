@@ -52,7 +52,14 @@ export interface ChatbotLauncherConfig {
 export interface Chatbot {
   /** Stable catalog id, also the iframe route segment (e.g. "dra-renata-reis"). */
   id: string;
+  /** Visitor-facing name shown inside the chat (embed `data-bot-name`, chat header). */
   name: string;
+  /**
+   * Operational name shown in the dashboard bot list and other operator
+   * surfaces, so several bots can share the same visitor-facing `name`.
+   * Optional — when empty, operator surfaces fall back to `name`.
+   */
+  flowName?: string;
   clientId: string;
   clientName: string;
   status: ChatbotStatus;

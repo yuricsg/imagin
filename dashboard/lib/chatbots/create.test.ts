@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChatbot, chatbotToInput, DEFAULT_EMBED, normalizeStoredChatbot, updateChatbot, type ChatbotInput } from "./create";
+import { buildChatbot, chatbotToInput, DEFAULT_EMBED, duplicateChatbotInput, normalizeStoredChatbot, updateChatbot, type ChatbotInput } from "./create";
 import { defaultFlowForTemplate } from "./flows";
 import {
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
@@ -10,6 +10,7 @@ const baseFlow = defaultFlowForTemplate("patient-capture");
 
 const baseInput: ChatbotInput = {
   name: "Dra. Renata Reis",
+  flowName: "",
   clientName: "Clínica Renata Reis",
   specialty: "Captação — Dermatologia",
   status: "active",
@@ -27,6 +28,7 @@ const baseInput: ChatbotInput = {
   whatsappDestinations: [],
   whatsappRoutingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
   whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  whatsappClosingMessage: "",
   launcherTeaserTexts: ["Olá! Posso te ajudar?"],
   launcherAvatarUrl: null,
   ...DEFAULT_EMBED,
@@ -138,6 +140,202 @@ describe("chatbotToInput / updateChatbot", () => {
     expect(updated.name).toBe("Dr. Ana Silva");
     expect(updated.specialty).toBe("Ortopedia");
     expect(updated.status).toBe("paused");
+  });
+});
+
+describe("flowName (nome operacional da lista)", () => {
+  it("round-trips flowName through build → toInput → update → normalize", () => {
+    const bot = buildChatbot(
+      { ...baseInput, flowName: " Fluxo de exames — LP " },
+      new Set(),
+      1_700_000_000_000,
+    );
+    expect(bot.flowName).toBe("Fluxo de exames — LP");
+
+    const input = chatbotToInput(bot);
+    expect(input.flowName).toBe("Fluxo de exames — LP");
+
+    const updated = updateChatbot(bot, { ...input, flowName: "Fluxo B" });
+    expect(updated.flowName).toBe("Fluxo B");
+    expect(updated.id).toBe(bot.id);
+
+    const restored = normalizeStoredChatbot(
+      JSON.parse(JSON.stringify(updated)),
+    );
+    expect(restored?.flowName).toBe("Fluxo B");
+  });
+
+  it("falls back to undefined when flowName is blank", () => {
+    const bot = buildChatbot(
+      { ...baseInput, flowName: "   " },
+      new Set(),
+      1_700_000_000_000,
+    );
+    expect(bot.flowName).toBeUndefined();
+    expect(chatbotToInput(bot).flowName).toBe("");
+
+    const cleared = updateChatbot(bot, { ...chatbotToInput(bot), flowName: "" });
+    expect(cleared.flowName).toBeUndefined();
+
+    const normalized = normalizeStoredChatbot({
+      id: "bot-x",
+      name: "Bot X",
+      flowName: "  ",
+    });
+    expect(normalized?.flowName).toBeUndefined();
+  });
+
+  it("preserves flowName from older stored payloads", () => {
+    const normalized = normalizeStoredChatbot({
+      id: "bot-x",
+      name: "Bot X",
+      flowName: " Fluxo legado ",
+    });
+    expect(normalized?.flowName).toBe("Fluxo legado");
+  });
+});
+
+describe("whatsappClosingMessage (encerramento editável)", () => {
+  it("round-trips closingMessage through build → toInput → update → normalize", () => {
+    const bot = buildChatbot(
+      {
+        ...baseInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "", phoneNumber: "+55 11 98888-7777" },
+        ],
+        whatsappClosingMessage: " Envie a mensagem para ser atendido(a). ",
+      },
+      new Set(),
+      1_700_000_000_000,
+    );
+    expect(bot.whatsapp.closingMessage).toBe(
+      "Envie a mensagem para ser atendido(a).",
+    );
+
+    const input = chatbotToInput(bot);
+    expect(input.whatsappClosingMessage).toBe(
+      "Envie a mensagem para ser atendido(a).",
+    );
+
+    const updated = updateChatbot(bot, {
+      ...input,
+      whatsappClosingMessage: "Fechamos por aqui — continue no WhatsApp.",
+    });
+    expect(updated.whatsapp.closingMessage).toBe(
+      "Fechamos por aqui — continue no WhatsApp.",
+    );
+
+    const restored = normalizeStoredChatbot(
+      JSON.parse(JSON.stringify(updated)),
+    );
+    expect(restored?.whatsapp.closingMessage).toBe(
+      "Fechamos por aqui — continue no WhatsApp.",
+    );
+  });
+
+  it("falls back to undefined when the closing message is blank", () => {
+    const bot = buildChatbot(
+      { ...baseInput, whatsappClosingMessage: "   " },
+      new Set(),
+      1_700_000_000_000,
+    );
+    expect(bot.whatsapp.closingMessage).toBeUndefined();
+    expect(chatbotToInput(bot).whatsappClosingMessage).toBe("");
+
+    const normalized = normalizeStoredChatbot({
+      id: "bot-x",
+      name: "Bot X",
+      whatsapp: { enabled: false, closingMessage: "  " },
+    });
+    expect(normalized?.whatsapp.closingMessage).toBeUndefined();
+  });
+
+  it("preserves closingMessage from older stored payloads", () => {
+    const normalized = normalizeStoredChatbot({
+      id: "bot-x",
+      name: "Bot X",
+      whatsapp: { enabled: true, closingMessage: " Encerramento legado " },
+    });
+    expect(normalized?.whatsapp.closingMessage).toBe("Encerramento legado");
+  });
+});
+
+describe("embed defaults e cura do domínio legado", () => {
+  it("falls back to the real deploys when no env is set", () => {
+    // vitest runs without NEXT_PUBLIC_* set — fallbacks must be the live deploys.
+    expect(DEFAULT_EMBED.apiBaseUrl).toBe("https://imagin-v587.onrender.com");
+    expect(DEFAULT_EMBED.appBaseUrl).toBe("https://imagin-virid.vercel.app");
+    expect(DEFAULT_EMBED.scriptPath).toBe("/embed/widget.js");
+  });
+
+  it("heals exactly the legacy aspirational domains on read", () => {
+    const normalized = normalizeStoredChatbot({
+      id: "bot-x",
+      name: "Bot X",
+      embed: {
+        apiBaseUrl: "https://api.imagin.app",
+        appBaseUrl: "https://app.imagin.app/", // trailing-slash variant
+        scriptPath: "/embed/widget.js",
+      },
+    });
+    expect(normalized?.embed.apiBaseUrl).toBe(DEFAULT_EMBED.apiBaseUrl);
+    expect(normalized?.embed.appBaseUrl).toBe(DEFAULT_EMBED.appBaseUrl);
+    expect(normalized?.embed.scriptPath).toBe("/embed/widget.js");
+  });
+
+  it("does not touch custom embed URLs", () => {
+    const normalized = normalizeStoredChatbot({
+      id: "bot-x",
+      name: "Bot X",
+      embed: {
+        apiBaseUrl: "https://api.exemplo.com",
+        appBaseUrl: "https://painel.exemplo.com",
+        scriptPath: "/widget.js",
+      },
+    });
+    expect(normalized?.embed).toEqual({
+      apiBaseUrl: "https://api.exemplo.com",
+      appBaseUrl: "https://painel.exemplo.com",
+      scriptPath: "/widget.js",
+    });
+  });
+});
+
+describe("duplicateChatbotInput", () => {
+  it("copies the full input with (cópia) suffixes on both names", () => {
+    const bot = buildChatbot(
+      { ...baseInput, flowName: "Fluxo original" },
+      new Set(),
+      1_700_000_000_000,
+    );
+    const input = duplicateChatbotInput(bot);
+
+    expect(input.name).toBe("Dra. Renata Reis (cópia)");
+    expect(input.flowName).toBe("Fluxo original (cópia)");
+    expect(input.clientName).toBe(bot.clientName);
+    expect(input.flowTemplateId).toBe(bot.flow.templateId);
+    expect(input.launcherTeaserTexts).toEqual(bot.launcher.teaserTexts);
+  });
+
+  it("uses the bot name as flowName base when the source has none", () => {
+    const bot = buildChatbot(baseInput, new Set(), 1_700_000_000_000);
+    const input = duplicateChatbotInput(bot);
+
+    expect(input.flowName).toBe("Dra. Renata Reis (cópia)");
+  });
+
+  it("produces a new bot (new id) when the duplicate input is built", () => {
+    const bot = buildChatbot(baseInput, new Set(), 1_700_000_000_000);
+    const copy = buildChatbot(
+      duplicateChatbotInput(bot),
+      new Set([bot.id]),
+      1_700_000_100_000,
+    );
+
+    expect(copy.id).not.toBe(bot.id);
+    expect(copy.createdAt).not.toBe(bot.createdAt);
+    expect(copy.flowName).toBe("Dra. Renata Reis (cópia)");
   });
 });
 

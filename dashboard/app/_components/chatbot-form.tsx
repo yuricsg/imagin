@@ -8,6 +8,7 @@ import {
   buildChatbot,
   DEFAULT_EMBED,
   chatbotToInput,
+  duplicateChatbotInput,
   type ChatbotInput,
 } from "@/lib/chatbots/create";
 import { CustomDialogueChat } from "@/app/chatbots/[botId]/embed/custom-dialogue-chat";
@@ -16,6 +17,7 @@ import {
   buildFlowPreview,
   BUILTIN_SAVE_AS,
   createFlowId,
+  FLOW_END_NO_WHATSAPP,
   FLOW_FIELD_LABELS,
   FLOW_INPUT_TYPE_LABELS,
   FLOW_MAPS_TO_LABELS,
@@ -50,6 +52,7 @@ import {
   type ChatbotFieldErrors,
 } from "@/lib/chatbots/validate";
 import {
+  DEFAULT_WHATSAPP_CLOSING_MESSAGES,
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   DEFAULT_WHATSAPP_ROUTING_QUESTION,
   emptyDestination,
@@ -181,6 +184,7 @@ export function ChatbotForm({
   onClose,
   onCreate,
   initialBot,
+  duplicateFrom,
   onUpdate,
 }: {
   onClose: () => void;
@@ -188,17 +192,27 @@ export function ChatbotForm({
   onCreate: (input: ChatbotInput) => Chatbot;
   /** When set, the form opens in edit mode with fields pre-filled. */
   initialBot?: Chatbot;
+  /**
+   * Source bot to duplicate: creation mode with every field pre-filled
+   * (names get a " (cópia)" suffix). Submit still runs `onCreate`.
+   */
+  duplicateFrom?: Chatbot;
   /** Persists edits; keeps the bot id unchanged. */
   onUpdate?: (input: ChatbotInput) => Chatbot;
 }) {
   const isEditing = Boolean(initialBot);
-  const seed = initialBot ? chatbotToInput(initialBot) : null;
+  const seed = initialBot
+    ? chatbotToInput(initialBot)
+    : duplicateFrom
+      ? duplicateChatbotInput(duplicateFrom)
+      : null;
 
   const [step, setStep] = useState(0);
   const [createdBot, setCreatedBot] = useState<Chatbot | null>(null);
   const [copied, setCopied] = useState(false);
 
   const [name, setName] = useState(seed?.name ?? "");
+  const [flowName, setFlowName] = useState(seed?.flowName ?? "");
   const [clientName, setClientName] = useState(seed?.clientName ?? "");
   const [specialty, setSpecialty] = useState(seed?.specialty ?? "");
   const [status, setStatus] = useState<ChatbotStatus>(seed?.status ?? "active");
@@ -244,7 +258,9 @@ export function ChatbotForm({
         return structuredClone(seed.flowDialogue);
       }
       if (initialBot) return undefined;
-      return seedDialogueFromTemplate("patient-capture");
+      // Plain creation starts from the default template; duplicating a legacy
+      // bot without dialogue seeds one from the source bot's template.
+      return seedDialogueFromTemplate(seed?.flowTemplateId ?? "patient-capture");
     },
   );
   const isDialogueMode = flowDialogue !== undefined;
@@ -273,6 +289,9 @@ export function ChatbotForm({
   );
   const [whatsappMessageTemplate, setWhatsappMessageTemplate] = useState(
     seed?.whatsappMessageTemplate ?? DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  );
+  const [whatsappClosingMessage, setWhatsappClosingMessage] = useState(
+    seed?.whatsappClosingMessage ?? "",
   );
   const [launcherTeaserTexts, setLauncherTeaserTexts] = useState<string[]>(
     () =>
@@ -352,6 +371,7 @@ export function ChatbotForm({
   function currentInput(): ChatbotInput {
     return {
       name,
+      flowName,
       clientName,
       specialty,
       status,
@@ -375,6 +395,7 @@ export function ChatbotForm({
       whatsappDestinations,
       whatsappRoutingQuestion,
       whatsappMessageTemplate,
+      whatsappClosingMessage,
       launcherTeaserTexts,
       launcherAvatarUrl,
       apiBaseUrl,
@@ -848,7 +869,7 @@ export function ChatbotForm({
           }
         : undefined,
     },
-    { botName: name, clientName },
+    { botName: name, clientName, closingMessage: whatsappClosingMessage },
   );
 
   return (
@@ -1035,6 +1056,29 @@ export function ChatbotForm({
                             }
                             className={inputClass(Boolean(fieldErrors.name))}
                           />
+                        </Field>
+
+                        <Field
+                          label="Nome do fluxo"
+                          htmlFor={`${formId}-flow-name`}
+                          className="sm:col-span-2"
+                        >
+                          <input
+                            id={`${formId}-flow-name`}
+                            value={flowName}
+                            onChange={(e) => setFlowName(e.target.value)}
+                            placeholder="Ex.: Fluxo de exames — landing page"
+                            aria-describedby={`${formId}-flow-name-hint`}
+                            className={inputClass(false)}
+                          />
+                          <p
+                            id={`${formId}-flow-name-hint`}
+                            className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
+                          >
+                            Opcional. Aparece na lista do painel para você
+                            identificar o fluxo. O nome do chatbot aparece para
+                            o visitante dentro do chat.
+                          </p>
                         </Field>
 
                         <Field
@@ -1531,7 +1575,10 @@ export function ChatbotForm({
                                             aria-label="Próxima etapa"
                                           >
                                             <option value="">
-                                              Encerrar fluxo
+                                              Encerrar e direcionar ao WhatsApp
+                                            </option>
+                                            <option value={FLOW_END_NO_WHATSAPP}>
+                                              Encerrar conversa (sem WhatsApp)
                                             </option>
                                             {flowDialogue.steps
                                               .filter(
@@ -2039,6 +2086,24 @@ export function ChatbotForm({
                         </div>
                       </div>
 
+                      <Field
+                        label="Mensagem de encerramento do chat"
+                        hint="Última mensagem exibida no chat antes do botão do WhatsApp. Deixe claro que a pessoa precisa enviar a mensagem para ser atendida."
+                        htmlFor={`${formId}-whatsapp-closing`}
+                      >
+                        <input
+                          id={`${formId}-whatsapp-closing`}
+                          value={whatsappClosingMessage}
+                          onChange={(e) =>
+                            setWhatsappClosingMessage(e.target.value)
+                          }
+                          placeholder={
+                            DEFAULT_WHATSAPP_CLOSING_MESSAGES[flowTone]
+                          }
+                          className={inputClass(false)}
+                        />
+                      </Field>
+
                       <WhatsAppPreview
                         phone={whatsappDestinations[0]?.phoneNumber ?? ""}
                         message={previewWhatsAppMessage(
@@ -2283,6 +2348,9 @@ export function ChatbotForm({
                 <>
                   <dl className="space-y-2.5 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-4 text-sm dark:border-zinc-800/60 dark:bg-zinc-950/30">
                     <ReviewRow label="Chatbot" value={name.trim()} />
+                    {flowName.trim() ? (
+                      <ReviewRow label="Nome do fluxo" value={flowName.trim()} />
+                    ) : null}
                     <ReviewRow label="Cliente" value={clientName.trim()} />
                     <ReviewRow label="Função" value={specialty.trim()} />
                     <ReviewRow

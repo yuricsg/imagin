@@ -21,6 +21,7 @@ import {
   normalizeStoredChatbot,
 } from "@/lib/chatbots/create";
 import { apiDeleteChatbot } from "@/lib/api/chatbots";
+import { chatbotDisplayName } from "@/lib/chatbots/display";
 import { MetricsRow } from "./metrics-row";
 import { ChatbotList } from "./chatbot-list";
 import { EmbedBlock } from "./embed-block";
@@ -251,7 +252,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
                 <span
                   className={`size-1.5 shrink-0 rounded-full ${ACCENTS[selectedBot.accent].dot}`}
                 />
-                <span className="truncate">filtrando por {selectedBot.name}</span>
+                <span className="truncate">filtrando por {chatbotDisplayName(selectedBot)}</span>
               </span>
             ) : null}
           </header>
@@ -319,6 +320,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               const normalized = normalizeStoredChatbot(bot);
               if (normalized) router.push(`/chatbots/${normalized.id}/edit`);
             }}
+            onDuplicate={(bot) => router.push(`/chatbots/new?from=${bot.id}`)}
             onDelete={handleDelete}
             nowMs={nowMs}
           />

@@ -98,6 +98,10 @@ New bots created on `/chatbots/new` (or edited on `/chatbots/[botId]/edit`) can 
 
 Custom-dialogue lead submissions send `flowMode: "custom_dialogue"` plus optional `answers`, `phone`, `email`, and `message`. Legacy intent validation is skipped for that mode.
 
+**Labels vs option ids:** `answers` keeps raw option ids keyed by step id (branching logic depends on them). Everything human-readable is resolved back to option labels with `resolveAnswerLabels` (dashboard) / `resolveDialogueAnswers` (backend, reading `dashboardConfig.flow.dialogue`): the `customFields`/`message` values the widget sends, the WhatsApp message template variables (`{exame}`, `{solicitacao}`, `{mensagem}`, custom saveAs keys, etc.), and the answers shown in the dashboard lead modal. Multi-choice labels join with `", "`. An id the dialogue no longer knows falls back to the raw value — never an empty string.
+
+**Two ways to end the flow:** in a branching dialogue, a single-choice option's `nextStepId` may be a step id, empty (end and hand off to WhatsApp — the builder labels it "Encerrar e direcionar ao WhatsApp"), or the sentinel `end:no-whatsapp` (`FLOW_END_NO_WHATSAPP`, builder label "Encerrar conversa (sem WhatsApp)"). The sentinel ends the chat with one tone-aware goodbye bubble (`farewellMessageForTone`) — no closing bubbles, no lead creation, no WhatsApp CTA. The runtime still records `answer_submitted` (so a no-interest label derives `not_interested` as usual) and `flow_completed` for the audit trail. In the legacy flow, a `consultationDecision` that reads as no-interest (`isNotInterestedDecision`, mirroring the backend's `isNotInterestedText`) still registers the lead but ends with the same goodbye instead of the WhatsApp CTA.
+
 ### Site launcher (bubble + avatar)
 
 Dashboard bots store `Chatbot.launcher`:
@@ -109,20 +113,60 @@ On create/update, the dashboard API mirrors `launcher.teaserTexts` into backend 
 
 `flow.tone` (`friendly` | `formal`) rewrites stock dialogue copy when the operator toggles tone in the wizard: greeting, template prompts (service/insurance/etc.), contact-field questions, and the closing line. Operator-edited questions are left unchanged. Templates expose `greetingsByTone` / `promptsByTone`; `applyToneToDialogue(dialogue, tone, templateId)` applies the swap.
 
+### Operational flow name (`flowName`)
+
+A bot has two distinct names:
+
+- `Chatbot.name` is **visitor-facing**: it goes into the embed snippet as
+  `data-bot-name` and appears in the chat header on the client site.
+- `Chatbot.flowName` (optional) is **operator-facing**: it titles the bot in
+  the dashboard list and every other operator surface (selected-bot contexts,
+  embed block, lead views, CSV export) via `chatbotDisplayName(bot)`, which
+  falls back to `name` when `flowName` is empty. Several bots can share the
+  same visitor-facing `name` while keeping distinct flow names.
+
+`flowName` lives inside the `dashboardConfig` JSON column like every other
+dashboard-only field, so no database migration is needed.
+`normalizeStoredChatbot` preserves it only when it is a non-blank string, and
+`buildChatbot` / `updateChatbot` store `undefined` for blank input, so older
+payloads and untouched bots simply have no key. Nothing visitor-facing (widget,
+embed script, iframe) reads it.
+
+### Duplicating a bot
+
+The bot list has a duplicate action (same visibility rules as edit/delete)
+that navigates to `/chatbots/new?from=<botId>`. The creation wizard loads the
+source bot with the same lookup pattern as the edit page (local store first,
+`apiListChatbots` fallback, loading/not-found states) and pre-fills **every**
+field — dialogue, WhatsApp, launcher, tracking, embed — through
+`duplicateChatbotInput(bot)`, which is `chatbotToInput(bot)` with a
+`" (cópia)"` suffix on both `name` and `flowName` (falling back to `name`).
+The operator can change anything, including the client, before saving. Submit
+stays in creation mode (`onCreate`), so `buildChatbot` derives a fresh
+id/createdAt (with numeric suffix on id collision) and the source bot is never
+modified.
+
 ## Recommended Embed Strategy
 
 Use a small script loader on the client site that injects an iframe-hosted widget.
 
-Example client install snippet:
+Example client install snippet (domains come from the bot's `embed` config —
+`NEXT_PUBLIC_APP_BASE_URL` / `NEXT_PUBLIC_API_BASE_URL` on the dashboard,
+falling back to the current production deploys, Vercel + Render):
 
 ```html
 <script
-  src="https://app.imagin.com.br/embed/widget.js"
-  data-api-base-url="https://api.imagin.com.br"
+  src="https://imagin-virid.vercel.app/embed/widget.js"
+  data-api-base-url="https://imagin-v587.onrender.com"
   data-bot-id="dra-renata-reis"
   data-client-id="client_id"
 ></script>
 ```
+
+`DEFAULT_EMBED` once pointed at aspirational `*.imagin.app` domains that were
+never configured in DNS; bots saved with exactly those values are healed to
+the current defaults when `normalizeStoredChatbot` reads them (custom values
+are untouched), and the healed value persists on the next save.
 
 The script should:
 
@@ -171,6 +215,14 @@ existing `dashboardConfig` JSON column, so adding an office needs no migration.
 Bots saved before routing existed carry only `whatsapp.phoneNumber`; the
 dashboard migrates them into a single unnamed destination on read
 (`normalizeWhatsAppDestinations`).
+
+`whatsapp.closingMessage` is an optional operator-editable override for the
+last chat bubble before the WhatsApp button — the directional line that tells
+the visitor to actually send the pre-filled message. When absent or blank, both
+widgets fall back to their tone-based defaults (friendly/formal); when set, the
+custom text always wins and is never rewritten by later tone changes. It only
+applies with `whatsapp.enabled` and persists inside the existing
+`dashboardConfig` JSON, so no migration is needed.
 
 ## Suggested Routes
 
