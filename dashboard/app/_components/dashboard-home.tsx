@@ -31,6 +31,7 @@ import { LeadsTable } from "./leads-table";
 import { LeadDetailsModal } from "./lead-details-modal";
 import { CommandPalette, type CommandItem } from "./command-palette";
 import { COMMAND_PALETTE_EVENT } from "./command-k-button";
+import { usePinnedCommands } from "./use-pinned-commands";
 import { useThemeOptional } from "./theme-provider";
 import { EmptyState } from "./ui";
 import {
@@ -69,6 +70,9 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [deletedBotIds, setDeletedBotIds] = useState<Set<string>>(new Set());
 
   const themeCtx = useThemeOptional();
+
+  // Pinned palette commands (localStorage external store, SSR-safe).
+  const { pinnedIds, togglePin } = usePinnedCommands();
 
   // Bots registered through the UI live only in the browser (localStorage), read
   // as an external store so SSR and the first client render agree (both empty).
@@ -383,7 +387,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
             {bots.length} {bots.length === 1 ? "chatbot" : "chatbots"} ·{" "}
             {clients.length} {clients.length === 1 ? "cliente" : "clientes"}
           </p>
-          <Link href="/chatbots/new" className="btn-brand px-4 py-2.5">
+          <Link href="/chatbots/new" className="btn-brand px-4 py-2.5 max-sm:min-h-11">
             <IconPlus className="size-4" />
             Novo chatbot
           </Link>
@@ -543,6 +547,8 @@ export function DashboardHome({ data }: { data: DashboardData }) {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         commands={commands}
+        pinnedIds={pinnedIds}
+        onTogglePin={togglePin}
       />
     </main>
   );

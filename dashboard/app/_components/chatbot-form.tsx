@@ -2624,7 +2624,7 @@ export function ChatbotForm({
                   <button
                     type="button"
                     onClick={() => goToStep(step - 1)}
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 max-sm:py-3 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   >
                     Voltar
                   </button>
@@ -2632,13 +2632,13 @@ export function ChatbotForm({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/30 max-sm:py-3 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   >
                     Cancelar
                   </button>
                 )}
               </div>
-              <button type="submit" disabled={saving} className="btn-brand px-4 py-2">
+              <button type="submit" disabled={saving} className="btn-brand px-4 py-2 max-sm:min-h-11">
                 {saving ? (
                   <>
                     <IconSpinner className="size-4 animate-spin" />

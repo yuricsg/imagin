@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { IconSearch } from "./icons";
+import { IconPin, IconSearch } from "./icons";
 import { useModifierKey } from "./use-modifier-key";
 
 export interface CommandItem {
@@ -38,13 +38,25 @@ export function CommandPalette({
   open,
   onClose,
   commands,
+  pinnedIds,
+  onTogglePin,
 }: {
   open: boolean;
   onClose: () => void;
   commands: CommandItem[];
+  /** Pinned command ids in pin order (persisted by the caller). */
+  pinnedIds: readonly string[];
+  onTogglePin: (id: string) => void;
 }) {
   if (!open) return null;
-  return <PaletteDialog commands={commands} onClose={onClose} />;
+  return (
+    <PaletteDialog
+      commands={commands}
+      onClose={onClose}
+      pinnedIds={pinnedIds}
+      onTogglePin={onTogglePin}
+    />
+  );
 }
 
 function optionId(id: string) {
@@ -54,9 +66,13 @@ function optionId(id: string) {
 function PaletteDialog({
   commands,
   onClose,
+  pinnedIds,
+  onTogglePin,
 }: {
   commands: CommandItem[];
   onClose: () => void;
+  pinnedIds: readonly string[];
+  onTogglePin: (id: string) => void;
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,15 +81,34 @@ function PaletteDialog({
   const [notice, setNotice] = useState<string | null>(null);
   const modifierLabel = useModifierKey();
 
+  const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
+
+  // Pinned first. Empty query: a "Fixados" section on top (pin order, items
+  // removed from their original groups). With a query: pinned matches sort
+  // before the rest, each side keeping its original order. Ids without a
+  // matching command (e.g. a deleted bot's command) simply never render.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return commands;
-    return commands.filter((cmd) =>
-      `${cmd.label} ${cmd.keywords ?? ""} ${cmd.group}`
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [commands, query]);
+    const matches = q
+      ? commands.filter((cmd) =>
+          `${cmd.label} ${cmd.keywords ?? ""} ${cmd.group}`
+            .toLowerCase()
+            .includes(q),
+        )
+      : commands;
+    if (pinnedIds.length === 0) return matches;
+    const rest = matches.filter((cmd) => !pinnedSet.has(cmd.id));
+    if (q) {
+      const pinnedMatches = matches.filter((cmd) => pinnedSet.has(cmd.id));
+      return [...pinnedMatches, ...rest];
+    }
+    const byId = new Map(matches.map((cmd) => [cmd.id, cmd]));
+    const pinned = pinnedIds
+      .map((id) => byId.get(id))
+      .filter((cmd): cmd is CommandItem => cmd !== undefined)
+      .map((cmd) => ({ ...cmd, group: "Fixados" }));
+    return [...pinned, ...rest];
+  }, [commands, query, pinnedIds, pinnedSet]);
 
   // Derived, never stored: keeps the highlight valid when the list shrinks.
   const clampedIndex = Math.min(
@@ -143,7 +178,7 @@ function PaletteDialog({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative mx-auto mt-[12vh] w-[calc(100%-2rem)] max-w-lg px-0 pb-[12vh]">
+      <div className="relative mx-auto mt-4 w-[calc(100%-2rem)] max-w-lg px-0 pb-4 sm:mt-[12vh] sm:pb-[12vh]">
         <div
           role="dialog"
           aria-modal="true"
@@ -181,7 +216,7 @@ function PaletteDialog({
             id={listId}
             role="listbox"
             aria-label="Comandos disponíveis"
-            className="max-h-80 overflow-y-auto p-2"
+            className="max-h-[55dvh] overflow-y-auto p-2 sm:max-h-80"
           >
             {filtered.length === 0 ? (
               <li className="px-3 py-6 text-center text-sm text-zinc-400">
@@ -201,6 +236,7 @@ function PaletteDialog({
                   ) : null;
                 lastGroup = cmd.group;
                 const active = index === clampedIndex;
+                const pinned = pinnedSet.has(cmd.id);
                 return [
                   header,
                   <li
@@ -210,7 +246,7 @@ function PaletteDialog({
                     aria-selected={active}
                     onClick={() => void runCommand(cmd)}
                     onMouseMove={() => setActiveIndex(index)}
-                    className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm ${
+                    className={`group/row flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm ${
                       active
                         ? "bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100"
                         : "text-zinc-700 dark:text-zinc-200"
@@ -228,6 +264,29 @@ function PaletteDialog({
                       </span>
                     ) : null}
                     <span className="min-w-0 flex-1 truncate">{cmd.label}</span>
+                    <button
+                      type="button"
+                      aria-pressed={pinned}
+                      aria-label={
+                        pinned
+                          ? `Desafixar ${cmd.label}`
+                          : `Fixar ${cmd.label}`
+                      }
+                      title={pinned ? "Desafixar comando" : "Fixar comando"}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onTogglePin(cmd.id);
+                      }}
+                      className={`-my-2 flex size-11 shrink-0 items-center justify-center rounded-lg transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:size-8 ${
+                        pinned
+                          ? "text-teal-600 opacity-100 dark:text-teal-400"
+                          : "text-zinc-400 opacity-60 hover:text-zinc-600 group-focus-within/row:opacity-100 group-hover/row:opacity-100 sm:opacity-0 dark:text-zinc-500 dark:hover:text-zinc-300"
+                      }`}
+                    >
+                      <IconPin
+                        className={`size-4 ${pinned ? "fill-current" : ""}`}
+                      />
+                    </button>
                     {cmd.hint ? (
                       <kbd className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-500">
                         {cmd.hint}

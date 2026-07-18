@@ -216,11 +216,11 @@ export function ChatbotList({
                 <IconX className="size-4" />
               </button>
             </div>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex justify-end gap-2 max-sm:flex-col-reverse">
               <button
                 type="button"
                 onClick={() => setConfirmDeleteId(null)}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 max-sm:py-3 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
                 Cancelar
               </button>
@@ -230,7 +230,7 @@ export function ChatbotList({
                   onDelete(confirmBot.id);
                   setConfirmDeleteId(null);
                 }}
-                className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40"
+                className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40 max-sm:py-3"
               >
                 Excluir
               </button>
@@ -405,7 +405,7 @@ function BotActionsMenu({
         title="Ações"
         onClick={() => (open ? onClose() : openMenu())}
         onKeyDown={onTriggerKeyDown}
-        className="flex size-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+        className="flex size-11 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:size-8 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
       >
         <IconDots className="size-4" />
       </button>
@@ -436,7 +436,7 @@ function BotActionsMenu({
                   action.run();
                 }}
                 onMouseMove={() => setActiveIndex(index)}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none ${
+                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none max-sm:py-3 ${
                   action.destructive
                     ? "text-rose-600 hover:bg-rose-50 focus-visible:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 dark:focus-visible:bg-rose-950/40"
                     : "text-zinc-700 hover:bg-zinc-100 focus-visible:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:bg-zinc-800"

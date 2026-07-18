@@ -162,6 +162,21 @@ Console de operador usa teclado de primeira classe (estilo Linear).
 - **Quick actions de lead** (desktop, reveladas em hover/focus-within da linha): copiar mensagem do WhatsApp (feedback "Copiado") e abrir conversa no WhatsApp. No mobile o card segue alvo único; o modal de detalhes oferece o link "Abrir conversa no WhatsApp".
 - **Chip "Somente novos"** na toolbar: `aria-pressed`, contador ao vivo, combina com os demais filtros.
 - **Menu de ações do chatbot** (kebab "⋯", visível em todo bot): padrão WAI-ARIA menu button — abre com clique/Enter/Espaço/↓, ↑↓ movem foco real, Esc fecha e devolve foco ao gatilho, clique fora fecha, um menu aberto por vez. Todo bot tem **Duplicar**; **Editar** e **Excluir** só aparecem em bots editáveis (o demo mostra apenas "Duplicar", sem separador). Excluir é rose, com diálogo de confirmação. Dropdown entra com `.motion-menu` (fade + subida 4px, 150ms). Ações nunca ficam escondidas atrás de hover.
+- **Comandos fixados** (pin na palette): cada linha tem um botão de pin (`IconPin`) revelado no hover/focus-within da linha e sempre visível quando fixado (teal, `fill-current`); clicar fixa/desafixa sem executar o comando (`stopPropagation`), com `aria-pressed` + `aria-label` por comando. Persistência em `localStorage["imagin:pinned-commands"]` (array de ids, na ordem em que foram fixados) via `use-pinned-commands.ts` — external store no mesmo padrão de `createdBots` (SSR vê vazio, sem hydration mismatch nem setState-em-effect). Ordenação: com busca vazia, os fixados abrem a lista sob o header **"Fixados"** (na ordem do pin, sem repetir no grupo original); com busca, matches fixados vêm antes dos demais, sem seção separada. Id sem comando correspondente (ex.: bot excluído) simplesmente não renderiza.
+
+## Responsividade mobile
+
+Breakpoint principal: `sm` (640px); a tabela de leads vira cards abaixo de `md` (768px).
+
+- **Leads**: `< md` usa cards empilhados (alvo de toque único por lead — nome, bot, badges, assunto, tempo relativo); `≥ md` mantém a tabela com `overflow-x-auto` (min-width 680px) e quick actions em hover/focus.
+- **Toolbar de leads**: busca, selects e datas empilham em coluna única com largura total; chip "Somente novos" e botões (Limpar/Exportar) alinhados à esquerda/direita conforme o espaço.
+- **Touch targets ≥ 44px** nos controles principais em `< sm` (`max-sm:min-h-11` / `max-sm:py-3` / `size-11`): busca, selects, datas, chips, botões de ação, menu "⋯", itens de menu, pin da palette, fechar modal, copiar embed e navegação do wizard. Controles secundários (theme toggle, avatar) podem ficar menores para não estourar o header em ~360px.
+- **Header**: logo encolhe via `max-w` + `min-w-0`; o botão Comandos vira ícone-only 44×44 (texto e `<kbd>` só em `≥ sm`); chip "Agência" escondido em `< sm`.
+- **Palette**: `mt-4`/`pb-4` (vs `12vh` no desktop), lista com `max-h-[55dvh]` para não quebrar com o teclado virtual; linhas com ~48px de altura.
+- **Modais**: `LeadDetailsModal` e diálogos abrem como bottom-sheet (`items-end`, `rounded-t-2xl`, `max-h-[92dvh]`) com scroll interno; CTA de WhatsApp full-width em `< sm`; diálogo de exclusão empilha botões (Excluir em cima).
+- **Métricas**: grid 2 colunas em `< lg` com `p-4` e números `text-2xl` (nunca truncam); 4 colunas em `≥ lg`.
+- **Wizard** (`/chatbots/new`): stepper vertical só em `≥ lg`; em telas menores, barra de progresso horizontal ("Etapa N de 5") + footer sticky com Voltar/Continuar sempre visíveis.
+- Motion: nenhuma animação nova depende de breakpoint; o blanket `prefers-reduced-motion` do `globals.css` cobre tudo.
 
 ## Do's and Don'ts
 

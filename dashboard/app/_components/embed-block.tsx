@@ -82,7 +82,7 @@ export function EmbedBlock({ bot }: { bot: Chatbot }) {
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 sm:size-8 dark:border-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               title="Abrir iframe em nova aba"
             >
               <IconExternal className="size-4" />
@@ -112,7 +112,7 @@ function CopyButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 max-sm:min-h-11 max-sm:px-2.5 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
     >
       {copied ? (
         <>

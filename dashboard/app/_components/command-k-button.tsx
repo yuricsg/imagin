@@ -9,10 +9,10 @@ import { useModifierKey } from "./use-modifier-key";
 export const COMMAND_PALETTE_EVENT = "imagin:toggle-command-palette";
 
 const BUTTON_CLASS =
-  "inline-flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 dark:border-zinc-700/80 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
+  "inline-flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center dark:border-zinc-700/80 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
 
 const KBD_CLASS =
-  "rounded border border-zinc-200 bg-zinc-50 px-1 py-0.5 text-[10px] font-semibold text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800";
+  "hidden rounded border border-zinc-200 bg-zinc-50 px-1 py-0.5 text-[10px] font-semibold text-zinc-400 sm:inline-block dark:border-zinc-700 dark:bg-zinc-800";
 
 /**
  * Header "⌘K" affordance. On the home it fires the palette event; elsewhere

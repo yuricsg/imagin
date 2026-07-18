@@ -87,7 +87,7 @@ export function LeadDetailsModal({
             type="button"
             onClick={onClose}
             aria-label="Fechar detalhes do lead"
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:hover:bg-zinc-800 dark:hover:text-white"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-teal-500/30 sm:size-9 dark:hover:bg-zinc-800 dark:hover:text-white"
           >
             <IconX className="size-5" />
           </button>
@@ -152,7 +152,7 @@ export function LeadDetailsModal({
                 href={lead.whatsappUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-teal-700 transition-colors hover:border-teal-300 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:border-zinc-700 dark:text-teal-300 dark:hover:border-teal-700 dark:hover:bg-teal-950/40"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-teal-700 transition-colors hover:border-teal-300 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 max-sm:w-full max-sm:justify-center max-sm:py-3 dark:border-zinc-700 dark:text-teal-300 dark:hover:border-teal-700 dark:hover:bg-teal-950/40"
               >
                 <IconExternal className="size-4" />
                 Abrir conversa no WhatsApp

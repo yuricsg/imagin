@@ -22,7 +22,7 @@ function MetricCard({
 }) {
   return (
     <div
-      className="motion-enter rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md dark:border-zinc-800/80 dark:bg-zinc-900/70"
+      className="motion-enter rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5 dark:border-zinc-800/80 dark:bg-zinc-900/70"
       style={{ animationDelay: `${Math.min(index, 9) * STAGGER_MS}ms` }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -36,7 +36,7 @@ function MetricCard({
       {/* key remounts on change so updates replay the soft entrance. */}
       <p
         key={value}
-        className="motion-enter mt-3 text-3xl font-semibold tracking-tight tabular-nums text-zinc-900 dark:text-zinc-50"
+        className="motion-enter mt-3 text-2xl font-semibold tracking-tight tabular-nums text-zinc-900 sm:text-3xl dark:text-zinc-50"
       >
         {value}
       </p>
@@ -88,7 +88,7 @@ export function MetricsRowSkeleton() {
       {[0, 1, 2, 3].map((i) => (
         <div
           key={i}
-          className="rounded-2xl border border-zinc-200/80 bg-white p-5 dark:border-zinc-800/80 dark:bg-zinc-900/70"
+          className="rounded-2xl border border-zinc-200/80 bg-white p-4 sm:p-5 dark:border-zinc-800/80 dark:bg-zinc-900/70"
         >
           <div className="flex items-start justify-between gap-2">
             <Skeleton className="h-3 w-24" />
