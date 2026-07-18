@@ -322,6 +322,9 @@ export function createApp(options: AppOptions = {}) {
           botId: session.botId,
           clientId: session.clientId,
           openedAt: session.openedAt,
+          // Lets the dashboard attribute accesses to a channel, the same way
+          // leads are attributed — required for per-channel conversion rates.
+          source: session.source,
         })),
     });
   });

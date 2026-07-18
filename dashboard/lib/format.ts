@@ -33,6 +33,19 @@ export function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+const percentFmt = new Intl.NumberFormat("pt-BR", {
+  style: "percent",
+  maximumFractionDigits: 2,
+});
+
+/**
+ * Percent that keeps up to two decimals. Channel rates are often below 1% —
+ * rounding those to whole percent would report 0,55% as 1%.
+ */
+export function percentPrecise(value: number): string {
+  return percentFmt.format(value);
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? "";

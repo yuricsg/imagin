@@ -272,10 +272,16 @@ describe("DashboardHome — funil real", () => {
         updatedAt: "2026-06-20T10:00:00.000Z",
       }),
     ];
+    const attribution = {
+      channel: "direct" as const,
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+    };
     const accesses = [
-      { id: "a1", botId: firstBot.id, clientId: firstBot.clientId, openedAt: "2026-07-05T09:00:00.000Z" },
-      { id: "a2", botId: firstBot.id, clientId: firstBot.clientId, openedAt: "2026-07-05T10:00:00.000Z" },
-      { id: "a3", botId: secondBot.id, clientId: secondBot.clientId, openedAt: "2026-06-20T10:00:00.000Z" },
+      { id: "a1", botId: firstBot.id, clientId: firstBot.clientId, openedAt: "2026-07-05T09:00:00.000Z", attribution },
+      { id: "a2", botId: firstBot.id, clientId: firstBot.clientId, openedAt: "2026-07-05T10:00:00.000Z", attribution },
+      { id: "a3", botId: secondBot.id, clientId: secondBot.clientId, openedAt: "2026-06-20T10:00:00.000Z", attribution },
     ];
     return makeData({
       bots: [firstBot, secondBot],

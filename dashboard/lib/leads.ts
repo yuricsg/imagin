@@ -111,7 +111,13 @@ function mapApiAccess(raw: unknown): ChatAccess | null {
   const clientId = readString(raw.clientId);
   const openedAt = readString(raw.openedAt);
   return id && botId && clientId && openedAt
-    ? { id, botId, clientId, openedAt }
+    ? {
+        id,
+        botId,
+        clientId,
+        openedAt,
+        attribution: buildAttribution(readSource(raw.source)),
+      }
     : null;
 }
 

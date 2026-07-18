@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { Chatbot } from "@/lib/chatbots/types";
 import type { BotActivity } from "@/lib/metrics";
@@ -8,7 +9,14 @@ import { BOT_STATUS } from "@/lib/labels";
 import { relativeTime } from "@/lib/format";
 import { resolveLauncherAvatarPath } from "@/lib/chatbots/launcher";
 import { Avatar, Badge, EmptyState } from "./ui";
-import { IconBot, IconPencil, IconPlus, IconTrash, IconX } from "./icons";
+import {
+  IconBot,
+  IconChartBar,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+  IconX,
+} from "./icons";
 
 export function ChatbotList({
   bots,
@@ -143,36 +151,47 @@ export function ChatbotList({
                     </div>
                   </div>
                 </button>
-                {editable && (onEdit || onDelete) ? (
-                  <div
-                    className={`flex shrink-0 flex-col justify-center gap-0.5 pr-1 transition-opacity ${
-                      selected
-                        ? "opacity-100"
-                        : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-                    }`}
+                <div
+                  className={`flex shrink-0 flex-col justify-center gap-0.5 pr-1 transition-opacity ${
+                    selected
+                      ? "opacity-100"
+                      : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                  }`}
+                >
+                  {/* Read-only, so every bot gets it — not just editable ones. */}
+                  <Link
+                    href={`/chatbots/${bot.id}`}
+                    aria-label={`Ver desempenho de ${bot.name}`}
+                    title="Ver desempenho"
+                    className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-cyan-400"
                   >
-                    {onEdit ? (
-                      <button
-                        type="button"
-                        onClick={() => onEdit(bot)}
-                        aria-label={`Editar ${bot.name}`}
-                        className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-indigo-400"
-                      >
-                        <IconPencil className="size-3.5" />
-                      </button>
-                    ) : null}
-                    {onDelete ? (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteId(bot.id)}
-                        aria-label={`Excluir ${bot.name}`}
-                        className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
-                      >
-                        <IconTrash className="size-3.5" />
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
+                    <IconChartBar className="size-3.5" />
+                  </Link>
+                  {editable && (onEdit || onDelete) ? (
+                    <>
+                      {onEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => onEdit(bot)}
+                          aria-label={`Editar ${bot.name}`}
+                          className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-indigo-400"
+                        >
+                          <IconPencil className="size-3.5" />
+                        </button>
+                      ) : null}
+                      {onDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(bot.id)}
+                          aria-label={`Excluir ${bot.name}`}
+                          className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
+                        >
+                          <IconTrash className="size-3.5" />
+                        </button>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
               </li>
             );
           })}

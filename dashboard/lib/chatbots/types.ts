@@ -168,6 +168,8 @@ export interface ChatAccess {
   botId: string;
   clientId: string;
   openedAt: string;
+  /** Same attribution shape as Lead, so both sides of a channel rate agree. */
+  attribution: LeadAttribution;
 }
 
 export interface Client {
