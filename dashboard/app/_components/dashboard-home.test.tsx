@@ -5,6 +5,7 @@ import type { DashboardData } from "@/lib/dashboard";
 import { computeMetrics } from "@/lib/metrics";
 import { computeBotActivity } from "@/lib/metrics";
 import { chatbotCatalog } from "@/lib/chatbots/catalog";
+import { chatbotDisplayName } from "@/lib/chatbots/display";
 import type { Chatbot, Lead } from "@/lib/chatbots/types";
 import { DashboardHome } from "./dashboard-home";
 
@@ -481,10 +482,23 @@ describe("DashboardHome — menu de ações do chatbot", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders no actions menu for non-editable (server) bots", () => {
+  it("shows only Duplicar in the menu for non-editable (server) bots", async () => {
+    const user = userEvent.setup();
     render(<DashboardHome data={makeData({ bots: [chatbotCatalog[0]] })} />);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: `Ações de ${chatbotDisplayName(chatbotCatalog[0])}`,
+      }),
+    );
     expect(
-      screen.queryByRole("button", { name: /^Ações de / }),
+      screen.getByRole("menuitem", { name: "Duplicar" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Editar" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Excluir" }),
     ).not.toBeInTheDocument();
   });
 

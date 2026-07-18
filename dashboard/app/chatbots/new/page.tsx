@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChatbotForm } from "@/app/_components/chatbot-form";
 import { useChatbotActions } from "@/app/_components/use-chatbot-actions";
 import { apiListChatbots } from "@/lib/api/chatbots";
+import { getChatbotById } from "@/lib/chatbots/catalog";
 import type { Chatbot } from "@/lib/chatbots/types";
 import { normalizeStoredChatbot } from "@/lib/chatbots/create";
 
@@ -18,11 +19,15 @@ export default function NewChatbotPage({
   const fromId = Array.isArray(params.from) ? params.from[0] : params.from;
   const router = useRouter();
   const { create, findBot } = useChatbotActions();
+  // Static catalog fallback: the demo bot resolves synchronously, no flash.
+  const catalogBot = fromId ? (getChatbotById(fromId) ?? null) : null;
   const [remoteBot, setRemoteBot] = useState<Chatbot | null>(null);
-  const [loadingRemote, setLoadingRemote] = useState(Boolean(fromId));
+  const [loadingRemote, setLoadingRemote] = useState(
+    Boolean(fromId) && !catalogBot,
+  );
 
   useEffect(() => {
-    if (!fromId) return;
+    if (!fromId || catalogBot) return;
     let cancelled = false;
     apiListChatbots()
       .then((list) => {
@@ -39,12 +44,12 @@ export default function NewChatbotPage({
     return () => {
       cancelled = true;
     };
-  }, [fromId]);
+  }, [fromId, catalogBot]);
 
   const duplicateFrom = useMemo(() => {
     if (!fromId) return null;
-    return findBot(fromId) ?? remoteBot;
-  }, [findBot, fromId, remoteBot]);
+    return findBot(fromId) ?? catalogBot ?? remoteBot;
+  }, [findBot, fromId, catalogBot, remoteBot]);
 
   if (fromId && !duplicateFrom && loadingRemote) {
     return (

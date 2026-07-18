@@ -152,17 +152,19 @@ export function ChatbotList({
                     </div>
                   </div>
                 </button>
-                {editable && (onEdit || onDuplicate || onDelete) ? (
+                {(onDuplicate || (editable && (onEdit || onDelete))) ? (
                   <BotActionsMenu
                     bot={bot}
                     displayName={displayName}
                     open={openMenuId === bot.id}
                     onOpen={() => setOpenMenuId(bot.id)}
                     onClose={() => setOpenMenuId(null)}
-                    onEdit={onEdit}
+                    onEdit={editable ? onEdit : undefined}
                     onDuplicate={onDuplicate}
                     onRequestDelete={
-                      onDelete ? () => setConfirmDeleteId(bot.id) : undefined
+                      editable && onDelete
+                        ? () => setConfirmDeleteId(bot.id)
+                        : undefined
                     }
                   />
                 ) : null}

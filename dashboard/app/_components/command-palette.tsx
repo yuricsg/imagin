@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { IconSearch } from "./icons";
+import { useModifierKey } from "./use-modifier-key";
 
 export interface CommandItem {
   id: string;
@@ -62,6 +63,7 @@ function PaletteDialog({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  const modifierLabel = useModifierKey();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -241,7 +243,7 @@ function PaletteDialog({
             <span aria-live="polite">
               {notice ?? "↑↓ navegar · Enter executar · Esc fechar"}
             </span>
-            <span>⌘K</span>
+            <span>{modifierLabel}</span>
           </div>
         </div>
       </div>

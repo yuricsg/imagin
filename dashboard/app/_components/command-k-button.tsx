@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IconSearch } from "./icons";
+import { useModifierKey } from "./use-modifier-key";
 
 /** Window event toggling the home command palette (dashboard-home listens). */
 export const COMMAND_PALETTE_EVENT = "imagin:toggle-command-palette";
@@ -19,16 +20,21 @@ const KBD_CLASS =
  */
 export function CommandKButton() {
   const pathname = usePathname();
+  const modifierLabel = useModifierKey();
   const content = (
     <>
       <IconSearch className="size-3.5" />
       <span className="hidden sm:inline">Comandos</span>
-      <kbd className={KBD_CLASS}>⌘K</kbd>
+      <kbd className={KBD_CLASS}>{modifierLabel}</kbd>
     </>
   );
   if (pathname !== "/") {
     return (
-      <Link href="/" className={BUTTON_CLASS} title="Voltar ao painel (⌘K na página inicial)">
+      <Link
+        href="/"
+        className={BUTTON_CLASS}
+        title={`Voltar ao painel (${modifierLabel} na página inicial)`}
+      >
         {content}
       </Link>
     );
@@ -37,7 +43,7 @@ export function CommandKButton() {
     <button
       type="button"
       className={BUTTON_CLASS}
-      title="Abrir comandos (⌘K ou Ctrl+K)"
+      title={`Abrir comandos (${modifierLabel})`}
       aria-keyshortcuts="meta+k control+k"
       onClick={() => window.dispatchEvent(new CustomEvent(COMMAND_PALETTE_EVENT))}
     >

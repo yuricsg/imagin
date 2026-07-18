@@ -134,10 +134,13 @@ embed script, iframe) reads it.
 
 ### Duplicating a bot
 
-The bot list has a duplicate action (same visibility rules as edit/delete)
-that navigates to `/chatbots/new?from=<botId>`. The creation wizard loads the
-source bot with the same lookup pattern as the edit page (local store first,
-`apiListChatbots` fallback, loading/not-found states) and pre-fills **every**
+Every bot has a duplicate action (in the kebab menu and the command palette;
+edit/delete stay restricted to editable bots) that navigates to
+`/chatbots/new?from=<botId>`. The creation wizard resolves the source bot in
+three steps: local store first, then the static catalog
+(`lib/chatbots/catalog.ts` via `getChatbotById`, which resolves the demo bot
+synchronously — no loading flash and no remote fetch), then the
+`apiListChatbots` fallback with loading/not-found states. It pre-fills **every**
 field — dialogue, WhatsApp, launcher, tracking, embed — through
 `duplicateChatbotInput(bot)`, which is `chatbotToInput(bot)` with a
 `" (cópia)"` suffix on both `name` and `flowName` (falling back to `name`).

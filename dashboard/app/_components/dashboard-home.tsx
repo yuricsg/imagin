@@ -342,30 +342,29 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       ),
       run: () => setSelectedBotId(bot.id),
     })),
-    // Edit/duplicate per editable bot (delete stays menu-only, with confirm).
+    // Edit per editable bot (delete stays menu-only, with confirm).
     ...bots
       .filter((bot) => editableBotIds.has(bot.id))
-      .flatMap((bot): CommandItem[] => [
-        {
-          id: `edit-bot-${bot.id}`,
-          group: "Chatbots",
-          label: `Editar ${chatbotDisplayName(bot)}`,
-          keywords: `${bot.name} ${bot.clientName} editar alterar`,
-          icon: <IconPencil className="size-4" />,
-          run: () => {
-            const normalized = normalizeStoredChatbot(bot);
-            if (normalized) router.push(`/chatbots/${normalized.id}/edit`);
-          },
+      .map((bot): CommandItem => ({
+        id: `edit-bot-${bot.id}`,
+        group: "Chatbots",
+        label: `Editar ${chatbotDisplayName(bot)}`,
+        keywords: `${bot.name} ${bot.clientName} editar alterar`,
+        icon: <IconPencil className="size-4" />,
+        run: () => {
+          const normalized = normalizeStoredChatbot(bot);
+          if (normalized) router.push(`/chatbots/${normalized.id}/edit`);
         },
-        {
-          id: `duplicate-bot-${bot.id}`,
-          group: "Chatbots",
-          label: `Duplicar ${chatbotDisplayName(bot)}`,
-          keywords: `${bot.name} ${bot.clientName} duplicar copiar`,
-          icon: <IconCopy className="size-4" />,
-          run: () => router.push(`/chatbots/new?from=${bot.id}`),
-        },
-      ]),
+      })),
+    // Duplicate for every bot, including non-editable (demo) ones.
+    ...bots.map((bot): CommandItem => ({
+      id: `duplicate-bot-${bot.id}`,
+      group: "Chatbots",
+      label: `Duplicar ${chatbotDisplayName(bot)}`,
+      keywords: `${bot.name} ${bot.clientName} duplicar copiar`,
+      icon: <IconCopy className="size-4" />,
+      run: () => router.push(`/chatbots/new?from=${bot.id}`),
+    })),
   ];
 
   return (
