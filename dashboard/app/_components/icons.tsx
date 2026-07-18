@@ -31,6 +31,26 @@ export function IconBot(props: IconProps) {
   );
 }
 
+/** Inline busy indicator for buttons (pair with `animate-spin`). */
+export function IconSpinner(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+    </Icon>
+  );
+}
+
+/** Vertical kebab (⋯) for per-row action menus. */
+export function IconDots(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
 export function IconBolt(props: IconProps) {
   return (
     <Icon {...props}>

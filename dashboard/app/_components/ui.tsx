@@ -80,3 +80,14 @@ export function EmptyState({
     </div>
   );
 }
+
+/**
+ * Shimmer placeholder block (globals.css `.motion-skeleton`). Compose with
+ * radius/size classes; always inside an aria-hidden container or with
+ * aria-hidden itself, and pair with a role="status" wrapper announcing it.
+ */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div aria-hidden="true" className={`motion-skeleton rounded-md ${className}`} />
+  );
+}

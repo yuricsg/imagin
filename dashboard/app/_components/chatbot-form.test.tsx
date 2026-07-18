@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -93,6 +94,45 @@ describe("ChatbotForm (wizard)", () => {
     expect(
       screen.getByRole("button", { name: "Concluir" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows an inline spinner on the submit button while saving", async () => {
+    const user = userEvent.setup();
+    let captured: ChatbotInput | null = null;
+    let resolveSave: (bot: ReturnType<typeof buildChatbot>) => void = () => {};
+    const pending = new Promise<ReturnType<typeof buildChatbot>>((resolve) => {
+      resolveSave = resolve;
+    });
+    const onCreate = vi.fn((input: ChatbotInput) => {
+      captured = input;
+      return pending;
+    });
+
+    render(<ChatbotForm onClose={vi.fn()} onCreate={onCreate} />);
+
+    await fillStepOne(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await user.click(screen.getByRole("button", { name: "Criar chatbot" }));
+
+    // While the save promise is pending: spinner label + disabled button.
+    const savingButton = await screen.findByRole("button", {
+      name: /Salvando…/,
+    });
+    expect(savingButton).toBeDisabled();
+    expect(onCreate).toHaveBeenCalledOnce();
+
+    // Resolving swaps the spinner for the success screen (the "check").
+    await act(async () => {
+      resolveSave(buildChatbot(captured!, new Set(), 1_700_000_000_000));
+    });
+    expect(await screen.findByText("Chatbot criado!")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Salvando…/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("blocks step 1 until required fields are filled, with per-field errors", async () => {

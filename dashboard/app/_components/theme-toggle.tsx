@@ -27,9 +27,9 @@ export function ThemeToggle() {
             aria-pressed={selected}
             aria-label={THEME_LABELS[value]}
             title={THEME_LABELS[value]}
-            className={`flex size-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 ${
+            className={`flex size-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/45 ${
               selected
-                ? "bg-cyan-500 text-teal-950 shadow-sm dark:bg-cyan-400"
+                ? "bg-teal-600 text-white shadow-sm dark:bg-teal-600"
                 : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
             }`}
           >

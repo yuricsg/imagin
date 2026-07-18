@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardData } from "@/lib/dashboard";
@@ -157,8 +157,9 @@ describe("DashboardHome — navegação do wizard", () => {
     render(<DashboardHome data={makeData()} />);
 
     await user.click(
-      screen.getByRole("button", { name: /Editar Dr\. Caio Costa/i }),
+      screen.getByRole("button", { name: "Ações de Dr. Caio Costa" }),
     );
+    await user.click(screen.getByRole("menuitem", { name: "Editar" }));
 
     expect(pushMock).toHaveBeenCalledWith("/chatbots/dr-caio-costa/edit");
   });
@@ -189,8 +190,9 @@ describe("DashboardHome — navegação do wizard", () => {
     render(<DashboardHome data={makeData()} />);
 
     await user.click(
-      screen.getByRole("button", { name: "Editar Bot Legado" }),
+      screen.getByRole("button", { name: "Ações de Bot Legado" }),
     );
+    await user.click(screen.getByRole("menuitem", { name: "Editar" }));
 
     expect(pushMock).toHaveBeenCalledWith("/chatbots/legacy-bot/edit");
   });
@@ -236,8 +238,9 @@ describe("DashboardHome — navegação do wizard", () => {
     render(<DashboardHome data={makeData()} />);
 
     await user.click(
-      screen.getByRole("button", { name: /Duplicar Dr\. Caio Costa/i }),
+      screen.getByRole("button", { name: "Ações de Dr. Caio Costa" }),
     );
+    await user.click(screen.getByRole("menuitem", { name: "Duplicar" }));
 
     expect(pushMock).toHaveBeenCalledWith("/chatbots/new?from=dr-caio-costa");
   });
@@ -286,12 +289,17 @@ describe("DashboardHome — navegação do wizard", () => {
     expect(
       screen.getByRole("button", { name: "Fluxo LP Cardio, Clínica Costa" }),
     ).toBeInTheDocument();
+    // Actions live behind the always-visible kebab menu.
+    await user.click(
+      screen.getByRole("button", { name: "Ações de Fluxo LP Cardio" }),
+    );
     expect(
-      screen.getByRole("button", { name: "Editar Fluxo LP Cardio" }),
+      screen.getByRole("menuitem", { name: "Editar" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Duplicar Fluxo LP Cardio" }),
+      screen.getByRole("menuitem", { name: "Duplicar" }),
     ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     // Bots without flowName fall back to the visitor-facing name.
     expect(
       screen.getByRole("button", { name: "Dr. Sem Fluxo, Clínica Costa" }),
@@ -344,16 +352,158 @@ describe("DashboardHome — navegação do wizard", () => {
 
     render(<DashboardHome data={makeData()} />);
 
-    await user.click(screen.getByRole("button", { name: "Excluir Bot Temp" }));
+    await user.click(
+      screen.getByRole("button", { name: "Ações de Bot Temp" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Excluir" }));
     const confirm = screen.getByRole("alertdialog", { name: /Excluir chatbot/i });
     await user.click(within(confirm).getByRole("button", { name: "Excluir" }));
 
     expect(
-      screen.queryByRole("button", { name: "Excluir Bot Temp" }),
+      screen.queryByRole("button", { name: "Ações de Bot Temp" }),
     ).not.toBeInTheDocument();
     expect(
       JSON.parse(window.localStorage.getItem("imagin:chatbots") ?? "[]"),
     ).toEqual([]);
+  });
+});
+
+describe("DashboardHome — menu de ações do chatbot", () => {
+  function localBot(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "dr-caio-costa",
+      name: "Dr. Caio Costa",
+      clientId: "clinica-costa",
+      clientName: "Clínica Costa",
+      status: "active",
+      specialty: "Ortopedia",
+      accent: "indigo",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      embed: {
+        apiBaseUrl: "https://api.imagin.app",
+        appBaseUrl: "https://app.imagin.app",
+        scriptPath: "/embed/widget.js",
+      },
+      flow: {
+        templateId: "patient-capture",
+        tone: "friendly",
+        greeting: "",
+        collectFields: ["name", "phone"],
+        services: [],
+        insuranceMode: "both",
+        insurances: [],
+      },
+      tracking: { gaMeasurementId: "", metaPixelId: "" },
+      whatsapp: { enabled: false, phoneNumber: "", messageTemplate: "" },
+      ...overrides,
+    };
+  }
+
+  function seedLocal(bots: object[]) {
+    window.localStorage.setItem("imagin:chatbots", JSON.stringify(bots));
+  }
+
+  it("keeps the kebab trigger always visible and toggles the menu by click", async () => {
+    const user = userEvent.setup();
+    seedLocal([localBot()]);
+    render(<DashboardHome data={makeData()} />);
+
+    const trigger = screen.getByRole("button", {
+      name: "Ações de Dr. Caio Costa",
+    });
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByRole("menu", { name: "Ações de Dr. Caio Costa" });
+    expect(
+      within(menu).getByRole("menuitem", { name: "Editar" }),
+    ).toHaveFocus();
+
+    await user.click(trigger);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("closes with Esc returning focus to the trigger, and on outside click", async () => {
+    const user = userEvent.setup();
+    seedLocal([localBot()]);
+    render(<DashboardHome data={makeData()} />);
+    const trigger = screen.getByRole("button", {
+      name: "Ações de Dr. Caio Costa",
+    });
+
+    await user.click(trigger);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("navigates menu items with arrow keys", async () => {
+    const user = userEvent.setup();
+    seedLocal([localBot()]);
+    render(<DashboardHome data={makeData()} />);
+    await user.click(
+      screen.getByRole("button", { name: "Ações de Dr. Caio Costa" }),
+    );
+
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Duplicar" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Excluir" })).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("menuitem", { name: "Duplicar" })).toHaveFocus();
+  });
+
+  it("keeps only one menu open at a time", async () => {
+    const user = userEvent.setup();
+    seedLocal([localBot(), localBot({ id: "bot-dois", name: "Bot Dois" })]);
+    render(<DashboardHome data={makeData()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Ações de Dr. Caio Costa" }),
+    );
+    expect(
+      screen.getByRole("menu", { name: "Ações de Dr. Caio Costa" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ações de Bot Dois" }));
+    expect(
+      screen.queryByRole("menu", { name: "Ações de Dr. Caio Costa" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menu", { name: "Ações de Bot Dois" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders no actions menu for non-editable (server) bots", () => {
+    render(<DashboardHome data={makeData({ bots: [chatbotCatalog[0]] })} />);
+    expect(
+      screen.queryByRole("button", { name: /^Ações de / }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lists Editar/Duplicar per editable bot in the ⌘K palette", async () => {
+    const user = userEvent.setup();
+    seedLocal([localBot()]);
+    render(<DashboardHome data={makeData()} />);
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const dialog = await screen.findByRole("dialog", {
+      name: "Paleta de comandos",
+    });
+    expect(
+      within(dialog).getByRole("option", { name: /Editar Dr\. Caio Costa/ }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("option", { name: /Duplicar Dr\. Caio Costa/ }),
+    );
+    expect(pushMock).toHaveBeenCalledWith("/chatbots/new?from=dr-caio-costa");
   });
 });
 
@@ -515,5 +665,128 @@ describe("DashboardHome — respostas do diálogo no modal do lead", () => {
     expect(within(modal).getByText("Exame")).toBeInTheDocument();
     expect(within(modal).getByText("Solicitação")).toBeInTheDocument();
     expect(within(modal).queryByText("step-exames")).not.toBeInTheDocument();
+  });
+});
+
+describe("DashboardHome — command palette, atalhos e quick actions", () => {
+  function twoStatusData() {
+    const fresh = makeLead({
+      id: "lead-new",
+      leadId: "lead-new",
+      name: "Maria Real",
+      status: "new",
+    });
+    const old = makeLead({
+      id: "lead-old",
+      leadId: "lead-old",
+      name: "João Antigo",
+      email: "joao@example.com",
+      status: "converted",
+    });
+    return makeData({ leads: [fresh, old] });
+  }
+
+  it("opens with ⌘K, navigates with the keyboard and runs the highlighted action", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome data={twoStatusData()} />);
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const dialog = await screen.findByRole("dialog", {
+      name: "Paleta de comandos",
+    });
+    const input = within(dialog).getByRole("combobox", {
+      name: "Buscar comandos",
+    });
+    // Opening focuses the input (rAF) — wait for it before typing arrows.
+    await waitFor(() => expect(input).toHaveFocus());
+
+    // First action is "Criar chatbot"; ArrowDown highlights "Somente novos".
+    await user.keyboard("{ArrowDown}");
+    expect(input).toHaveAttribute(
+      "aria-activedescendant",
+      "command-option-only-new",
+    );
+    await user.keyboard("{Enter}");
+
+    // Palette closed and the only-new filter applied: converted lead hides.
+    expect(
+      screen.queryByRole("dialog", { name: "Paleta de comandos" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("João Antigo")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Maria Real").length).toBeGreaterThan(0);
+  });
+
+  it("filters commands as you type and closes with Esc", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome data={makeData()} />);
+
+    await user.keyboard("{Control>}k{/Control}");
+    await screen.findByRole("dialog", { name: "Paleta de comandos" });
+    await user.type(
+      screen.getByRole("combobox", { name: "Buscar comandos" }),
+      "csv",
+    );
+    expect(
+      screen.getByRole("option", { name: /Exportar CSV/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Criar chatbot/ }),
+    ).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("dialog", { name: "Paleta de comandos" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("focuses the lead search with / and navigates to the new-bot page with n", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome data={makeData()} />);
+
+    await user.keyboard("/");
+    const searchInput = screen.getByPlaceholderText(/Buscar por nome/);
+    expect(searchInput).toHaveFocus();
+
+    // Typing "n" inside the search field must not trigger the shortcut.
+    await user.keyboard("n");
+    expect(pushMock).not.toHaveBeenCalled();
+
+    // With focus outside fields, "n" navigates to the create page.
+    (document.activeElement as HTMLElement).blur();
+    await user.keyboard("n");
+    expect(pushMock).toHaveBeenCalledWith("/chatbots/new");
+  });
+
+  it("toggles the Somente novos chip showing the live counter", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome data={twoStatusData()} />);
+
+    const chip = screen.getByRole("button", { name: /Somente novos/ });
+    expect(chip).toHaveTextContent("1");
+
+    await user.click(chip);
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("João Antigo")).not.toBeInTheDocument();
+
+    await user.click(chip);
+    expect(chip).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByText("João Antigo").length).toBeGreaterThan(0);
+  });
+
+  it("copies the lead WhatsApp message from the row quick action", async () => {
+    const user = userEvent.setup();
+    // userEvent installs its own clipboard stub — override after setup.
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    render(<DashboardHome data={twoStatusData()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Copiar mensagem de Maria Real" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("Mensagem real");
+    expect(await screen.findByText("Copiado")).toBeInTheDocument();
   });
 });

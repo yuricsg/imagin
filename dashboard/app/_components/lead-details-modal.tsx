@@ -13,7 +13,7 @@ import {
 } from "@/lib/chatbots/flows";
 import { LEAD_CHANNEL, LEAD_STATUS } from "@/lib/labels";
 import { Badge } from "./ui";
-import { IconX } from "./icons";
+import { IconExternal, IconX } from "./icons";
 
 export function LeadDetailsModal({
   lead,
@@ -87,7 +87,7 @@ export function LeadDetailsModal({
             type="button"
             onClick={onClose}
             aria-label="Fechar detalhes do lead"
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 dark:hover:bg-zinc-800 dark:hover:text-white"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:hover:bg-zinc-800 dark:hover:text-white"
           >
             <IconX className="size-5" />
           </button>
@@ -105,7 +105,7 @@ export function LeadDetailsModal({
 
           <ModalSection title="Classificação">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge label={lead.classification.primary} className="bg-cyan-500/10 text-cyan-800 ring-cyan-600/20 dark:text-cyan-200" />
+              <Badge label={lead.classification.primary} className="bg-teal-500/10 text-teal-800 ring-teal-600/20 dark:text-teal-200" />
               <Badge label={channel.label} className={channel.badge} />
             </div>
             {lead.classification.details.length > 0 ? (
@@ -147,6 +147,17 @@ export function LeadDetailsModal({
                 <p className="mt-1 text-sm leading-6 text-zinc-700 dark:text-zinc-200">{lead.whatsappMessage}</p>
               </div>
             ) : null}
+            {lead.whatsappUrl ? (
+              <a
+                href={lead.whatsappUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-teal-700 transition-colors hover:border-teal-300 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:border-zinc-700 dark:text-teal-300 dark:hover:border-teal-700 dark:hover:bg-teal-950/40"
+              >
+                <IconExternal className="size-4" />
+                Abrir conversa no WhatsApp
+              </a>
+            ) : null}
           </ModalSection>
 
           <ModalSection title="Progresso no fluxo">
@@ -162,7 +173,7 @@ export function LeadDetailsModal({
               <ol className="mt-5 space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 {lead.events.map((event) => (
                   <li key={event.id} className="flex gap-3 text-sm">
-                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-cyan-500" />
+                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-teal-500" />
                     <div className="min-w-0">
                       <p className="font-medium text-zinc-800 dark:text-zinc-100">{eventLabel(event)}</p>
                       {event.label ? <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">{event.label}</p> : null}

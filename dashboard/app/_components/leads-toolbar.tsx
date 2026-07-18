@@ -22,7 +22,7 @@ function Select({
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full appearance-none rounded-lg border border-zinc-200 bg-white/70 py-2 pl-3 pr-8 text-sm text-zinc-700 transition-colors hover:border-zinc-300 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200 dark:hover:border-zinc-700"
+        className="w-full appearance-none rounded-lg border border-zinc-200 bg-white py-2 pl-3 pr-8 text-sm text-zinc-700 transition-colors hover:border-zinc-300 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200 dark:hover:border-zinc-700"
       >
         {children}
       </select>
@@ -44,6 +44,9 @@ export function LeadsToolbar({
   onDateRange,
   bots,
   clients,
+  onlyNew,
+  onOnlyNew,
+  newCount,
   hasActiveFilters,
   onClear,
   onExport,
@@ -61,6 +64,9 @@ export function LeadsToolbar({
   onDateRange: (value: DateRange) => void;
   bots: Chatbot[];
   clients: Client[];
+  onlyNew: boolean;
+  onOnlyNew: (value: boolean) => void;
+  newCount: number;
   hasActiveFilters: boolean;
   onClear: () => void;
   onExport: () => void;
@@ -72,11 +78,12 @@ export function LeadsToolbar({
         <div className="relative min-w-0 flex-1 sm:min-w-56">
           <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
           <input
+            id="leads-search"
             type="search"
             value={search}
             onChange={(event) => onSearch(event.target.value)}
-            placeholder="Buscar por nome, contato ou assunto"
-            className="w-full rounded-lg border border-zinc-200 bg-white/70 py-2 pl-9 pr-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+            placeholder="Buscar por nome, contato ou assunto  ( / )"
+            className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-100 dark:placeholder:text-zinc-400"
           />
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -103,6 +110,31 @@ export function LeadsToolbar({
             ))}
           </Select>
         </div>
+        <button
+          type="button"
+          aria-pressed={onlyNew}
+          onClick={() => onOnlyNew(!onlyNew)}
+          title="Filtrar apenas leads com status novo"
+          className={`inline-flex items-center gap-1.5 self-start rounded-full border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 sm:self-center ${
+            onlyNew
+              ? "border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-600 dark:bg-teal-950/50 dark:text-teal-200"
+              : "border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:text-zinc-800 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:text-zinc-100"
+          }`}
+        >
+          <span
+            className={`size-1.5 rounded-full ${onlyNew ? "bg-teal-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+          />
+          Somente novos
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+              onlyNew
+                ? "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200"
+                : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+            }`}
+          >
+            {newCount}
+          </span>
+        </button>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -116,7 +148,7 @@ export function LeadsToolbar({
               onChange={(event) =>
                 onDateRange({ ...dateRange, start: event.target.value })
               }
-              className="block w-full rounded-lg border border-zinc-200 bg-white/70 px-3 py-2 text-sm text-zinc-700 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200"
+              className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200"
             />
           </label>
           <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
@@ -128,7 +160,7 @@ export function LeadsToolbar({
               onChange={(event) =>
                 onDateRange({ ...dateRange, end: event.target.value })
               }
-              className="block w-full rounded-lg border border-zinc-200 bg-white/70 px-3 py-2 text-sm text-zinc-700 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200"
+              className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/25 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200"
             />
           </label>
         </div>
@@ -137,7 +169,7 @@ export function LeadsToolbar({
             <button
               type="button"
               onClick={onClear}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-cyan-500/25 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-teal-500/25 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
             >
               <IconX className="size-4" />
               Limpar
@@ -147,7 +179,7 @@ export function LeadsToolbar({
             type="button"
             disabled={exportDisabled}
             onClick={onExport}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-45 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-teal-500/25 disabled:cursor-not-allowed disabled:opacity-45 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
           >
             <IconDownload className="size-4" />
             Exportar CSV
