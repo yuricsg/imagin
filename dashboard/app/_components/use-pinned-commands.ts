@@ -1,79 +1,90 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchPinnedCommands, savePinnedCommands } from "@/lib/api/pins";
 
-/** localStorage key holding pinned palette command ids, in pin order. */
-const STORAGE_KEY = "imagin:pinned-commands";
+/** Per-user localStorage cache — an optimistic mirror, not the source of truth. */
+function cacheKey(email: string): string {
+  return `imagin:pinned-commands:${email.toLowerCase()}`;
+}
 
-const EMPTY: string[] = [];
-let cache: { raw: string | null; ids: string[] } = { raw: null, ids: EMPTY };
-const listeners = new Set<() => void>();
-
-function parsePinned(raw: string | null): string[] {
-  if (!raw) return EMPTY;
+function readCache(email: string): string[] {
+  if (typeof window === "undefined") return [];
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((id): id is string => typeof id === "string");
-    }
+    const raw = window.localStorage.getItem(cacheKey(email));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
   } catch {
-    // Corrupted payload — fall through to EMPTY.
+    return [];
   }
-  return EMPTY;
 }
 
-function subscribe(callback: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  listeners.add(callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    listeners.delete(callback);
-    window.removeEventListener("storage", callback);
-  };
-}
-
-function getPinned(): string[] {
-  if (typeof window === "undefined") return EMPTY;
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (raw === cache.raw) return cache.ids;
-  const ids = parsePinned(raw);
-  cache = { raw, ids };
-  return ids;
-}
-
-function getServerPinned(): string[] {
-  return EMPTY;
-}
-
-function savePinned(ids: string[]): void {
+function writeCache(email: string, ids: string[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+    window.localStorage.setItem(cacheKey(email), JSON.stringify(ids));
   } catch {
-    // Storage may be unavailable (private mode / quota) — degrade quietly.
+    // Storage unavailable (private mode / quota) — degrade quietly.
   }
-  for (const callback of listeners) callback();
 }
 
 /**
- * Pinned palette commands as an external store (same pattern as createdBots):
- * SSR and the first client render both see EMPTY, then the real value swaps
- * in — no hydration mismatch, no setState-in-effect. Ids that no longer match
- * a command are ignored at render time (they simply never show).
+ * Command-palette pins for the signed-in operator. The database is the source
+ * of truth (synced across devices); localStorage is only a same-device cache so
+ * the pins render instantly before the network responds. Starts EMPTY on the
+ * server and first client render (no hydration mismatch), then hydrates.
  */
-export function usePinnedCommands(): {
+export function usePinnedCommands(email: string | null): {
   /** Pinned command ids, oldest pin first (new pins append). */
   pinnedIds: readonly string[];
   togglePin: (id: string) => void;
 } {
-  const pinnedIds = useSyncExternalStore(subscribe, getPinned, getServerPinned);
-  const togglePin = useCallback((id: string) => {
-    const current = getPinned();
-    savePinned(
-      current.includes(id)
-        ? current.filter((pinned) => pinned !== id)
-        : [...current, id],
-    );
-  }, []);
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+  // Guards a stale network response from overwriting a newer local toggle.
+  const versionRef = useRef(0);
+
+  useEffect(() => {
+    if (!email) {
+      setPinnedIds([]);
+      return;
+    }
+    const version = (versionRef.current += 1);
+    // Instant paint from cache, then reconcile with the authoritative DB copy.
+    setPinnedIds(readCache(email));
+    let cancelled = false;
+    fetchPinnedCommands(email)
+      .then((ids) => {
+        if (cancelled || version !== versionRef.current) return;
+        setPinnedIds(ids);
+        writeCache(email, ids);
+      })
+      .catch(() => {
+        // Offline / backend cold — keep showing the cached pins.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [email]);
+
+  const togglePin = useCallback(
+    (id: string) => {
+      if (!email) return;
+      versionRef.current += 1;
+      setPinnedIds((current) => {
+        const next = current.includes(id)
+          ? current.filter((pinned) => pinned !== id)
+          : [...current, id];
+        writeCache(email, next);
+        // Optimistic: persist in the background; the cache keeps the UI honest
+        // if the write fails, and the next load reconciles.
+        void savePinnedCommands(email, next).catch(() => {});
+        return next;
+      });
+    },
+    [email],
+  );
+
   return { pinnedIds, togglePin };
 }

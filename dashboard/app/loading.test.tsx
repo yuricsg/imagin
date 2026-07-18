@@ -31,6 +31,7 @@ function makeData(overrides: Partial<DashboardData> = {}): DashboardData {
     metrics: computeMetrics([], []),
     botActivity: {},
     dbBotIds: [],
+    userEmail: null,
     nowMs: NOW_MS,
     ...overrides,
   };

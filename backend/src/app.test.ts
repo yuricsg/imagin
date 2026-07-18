@@ -9,18 +9,31 @@ import { FileLeadRepository } from "./leads/file-lead-repository.js";
 import type { TrackingService } from "./tracking/types.js";
 import type { UserRepository } from "./users/user-repository.js";
 
-/** Accepts only ana@clinica.com / senha123 — stands in for the DB. */
-const fakeUserRepository = {
-  async verifyCredentials(email: string, password: string) {
-    if (email === "ana@clinica.com" && password === "senha123") {
-      return { id: "u1", email, name: "Ana" };
-    }
-    return null;
-  },
-  async upsert() {
-    throw new Error("not used in tests");
-  },
-} as unknown as UserRepository;
+/** In-memory stand-in for the DB: one known user with mutable pins. */
+function makeFakeUserRepository() {
+  const pins = new Map<string, string[]>();
+  return {
+    async verifyCredentials(email: string, password: string) {
+      if (email === "ana@clinica.com" && password === "senha123") {
+        return { id: "u1", email, name: "Ana" };
+      }
+      return null;
+    },
+    async getPinnedCommands(email: string) {
+      return pins.get(email) ?? [];
+    },
+    async setPinnedCommands(email: string, ids: string[]) {
+      if (email !== "ana@clinica.com") return null;
+      pins.set(email, ids);
+      return ids;
+    },
+    async upsert() {
+      throw new Error("not used in tests");
+    },
+  } as unknown as UserRepository;
+}
+
+const fakeUserRepository = makeFakeUserRepository();
 
 const noOpTrackingService: TrackingService = {
   async trackLeadCreated() {
@@ -152,6 +165,59 @@ test("auth login returns the user for valid credentials", async () => {
       headers: new Headers({ "Content-Type": "application/json" }),
     });
     assert.equal(missing.status, 400);
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("stores and reads a user's command-palette pins", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-pins-"));
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+      userRepository: makeFakeUserRepository(),
+    });
+
+    // Empty by default.
+    const initial = await app.request(
+      "/api/users/pinned-commands?email=ana@clinica.com",
+    );
+    assert.equal(initial.status, 200);
+    assert.deepEqual((await initial.json()).commandIds, []);
+
+    // Save and echo back the persisted order.
+    const saved = await app.request("/api/users/pinned-commands", {
+      method: "PUT",
+      body: JSON.stringify({
+        email: "ana@clinica.com",
+        commandIds: ["open-bot-a", "export-csv"],
+      }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).commandIds, [
+      "open-bot-a",
+      "export-csv",
+    ]);
+
+    // Read back the persisted order.
+    const readBack = await app.request(
+      "/api/users/pinned-commands?email=ana@clinica.com",
+    );
+    assert.deepEqual((await readBack.json()).commandIds, [
+      "open-bot-a",
+      "export-csv",
+    ]);
+
+    // Unknown user cannot store pins.
+    const unknown = await app.request("/api/users/pinned-commands", {
+      method: "PUT",
+      body: JSON.stringify({ email: "ninguem@x.com", commandIds: ["x"] }),
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+    assert.equal(unknown.status, 404);
   } finally {
     await rm(tempDir, { force: true, recursive: true });
   }

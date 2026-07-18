@@ -1,6 +1,18 @@
 import { chatbotCatalog, getClients } from "./chatbots/catalog";
 import { getLeads } from "./leads";
 import { apiListChatbots } from "./api/chatbots";
+
+/** Signed-in operator's email, or null when there's no session/request scope. */
+async function resolveUserEmail(): Promise<string | null> {
+  try {
+    // Lazy import so modules that don't render (tests) never load NextAuth.
+    const { auth } = await import("./auth");
+    const session = await auth();
+    return session?.user?.email ?? null;
+  } catch {
+    return null;
+  }
+}
 import type { ChatAccess, Chatbot, Client, DashboardMetrics, Lead } from "./chatbots/types";
 import {
   computeBotActivity,
@@ -18,6 +30,8 @@ export interface DashboardData {
   botActivity: Record<string, BotActivity>;
   /** IDs of bots fetched from the DB (editable/deletable via API). */
   dbBotIds: string[];
+  /** Signed-in operator's email — scopes per-user preferences (⌘K pins). */
+  userEmail: string | null;
   /** Reference clock shared by every relative-time render to avoid drift. */
   nowMs: number;
 }
@@ -42,6 +56,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const clients = getClients();
   const leadData = await getLeads(apiBaseUrl);
+  const userEmail = await resolveUserEmail();
 
   return {
     bots,
@@ -52,6 +67,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     metrics: computeMetrics(leadData.leads, leadData.accesses),
     botActivity: Object.fromEntries(computeBotActivity(leadData.leads)),
     dbBotIds: [...apiIds],
+    userEmail,
     nowMs,
   };
 }

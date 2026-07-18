@@ -122,6 +122,45 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ user });
   });
 
+  // Command-palette pins (⌘K), per operator. The dashboard is already behind
+  // its login; the operator's own email scopes these preference reads/writes.
+  app.get("/api/users/pinned-commands", async (c) => {
+    if (!userRepository) {
+      return c.json({ error: "auth is not configured" }, 503);
+    }
+    const email = c.req.query("email");
+    if (!email) {
+      return c.json({ error: "email is required" }, 400);
+    }
+    const commandIds = await userRepository.getPinnedCommands(email);
+    return c.json({ commandIds });
+  });
+
+  app.put("/api/users/pinned-commands", async (c) => {
+    if (!userRepository) {
+      return c.json({ error: "auth is not configured" }, 503);
+    }
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "invalid JSON body" }, 400);
+    }
+    const record = body as Record<string, unknown>;
+    const email = typeof record?.email === "string" ? record.email : "";
+    if (!email) {
+      return c.json({ error: "email is required" }, 400);
+    }
+    const commandIds = Array.isArray(record?.commandIds)
+      ? record.commandIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const saved = await userRepository.setPinnedCommands(email, commandIds);
+    if (saved === null) {
+      return c.json({ error: "unknown user" }, 404);
+    }
+    return c.json({ commandIds: saved });
+  });
+
   app.get("/api/public/chatbots/:botId/config", async (c) => {
     const chatbot = await chatbotRepository.get(c.req.param("botId"));
 

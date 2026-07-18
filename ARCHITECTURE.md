@@ -29,9 +29,13 @@ The operator dashboard is gated behind a login. There is no self-service
 registration — an admin provisions accounts directly.
 
 - **Users table** (`users`, backend Prisma): `email` (unique), `passwordHash`
-  (bcrypt), `name`, timestamps. Provision with `npm run user:add -- <email>
-  <senha> ["Nome"]` in `backend/` (re-running resets the password). Passwords
-  are never stored in plaintext.
+  (bcrypt), `name`, `pinnedCommands` (per-operator ⌘K pins), timestamps.
+  Provision with `npm run user:add -- <email> <senha> ["Nome"]` in `backend/`
+  (re-running resets the password). Passwords are never stored in plaintext.
+- **Command-palette pins** persist per operator in `users.pinnedCommands`
+  (`GET`/`PUT /api/users/pinned-commands`, scoped by the operator's email;
+  localStorage is only a same-device cache), so pins follow the user across
+  devices instead of living in one browser.
 - **Credential check**: `POST /api/auth/login` on the Hono backend verifies
   email + password against the `users` table with bcrypt and returns the user
   (200) or 401. Only provisioned accounts authenticate.

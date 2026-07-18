@@ -57,6 +57,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
     dataError = null,
     botActivity,
     dbBotIds,
+    userEmail = null,
     nowMs,
   } = data;
 
@@ -85,8 +86,8 @@ export function DashboardHome({ data }: { data: DashboardData }) {
 
   const themeCtx = useThemeOptional();
 
-  // Pinned palette commands (localStorage external store, SSR-safe).
-  const { pinnedIds, togglePin } = usePinnedCommands();
+  // Pinned palette commands — persisted per operator in the DB, cached locally.
+  const { pinnedIds, togglePin } = usePinnedCommands(userEmail);
 
   // Bots registered through the UI live only in the browser (localStorage), read
   // as an external store so SSR and the first client render agree (both empty).
