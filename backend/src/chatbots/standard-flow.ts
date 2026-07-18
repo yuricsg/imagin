@@ -31,6 +31,118 @@ type DashboardBotConfig = {
   whatsapp?: DashboardWhatsAppConfig;
 };
 
+/** Dialogue step read from `dashboardConfig.flow.dialogue` (untyped JSON). */
+type DialogueStep = {
+  id: string;
+  saveAs?: string;
+  options: { id: string; label: string }[];
+};
+
+const BUILTIN_SAVE_AS = new Set(["name", "phone", "email", "message"]);
+
+/**
+ * Reads the dialogue steps from the dashboard config, tolerating legacy or
+ * partial payloads. Choice answers are stored as option ids (branching needs
+ * them); the options here are how we map them back to visitor-facing labels.
+ */
+function readDialogueSteps(dashboardConfig: unknown): DialogueStep[] {
+  if (!dashboardConfig || typeof dashboardConfig !== "object") return [];
+  const flow = (dashboardConfig as { flow?: unknown }).flow;
+  if (!flow || typeof flow !== "object") return [];
+  const dialogue = (flow as { dialogue?: unknown }).dialogue;
+  if (!dialogue || typeof dialogue !== "object") return [];
+  const steps = (dialogue as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return [];
+
+  const out: DialogueStep[] = [];
+  for (const entry of steps) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.id !== "string" || !record.id.trim()) continue;
+    const options = Array.isArray(record.options)
+      ? record.options.flatMap((option) => {
+          if (!option || typeof option !== "object") return [];
+          const opt = option as Record<string, unknown>;
+          if (typeof opt.id !== "string" || typeof opt.label !== "string") {
+            return [];
+          }
+          return [{ id: opt.id, label: opt.label }];
+        })
+      : [];
+    const saveAsRaw =
+      typeof record.saveAs === "string"
+        ? record.saveAs
+        : typeof record.mapsTo === "string"
+          ? record.mapsTo
+          : "";
+    out.push({
+      id: record.id,
+      ...(saveAsRaw.trim() ? { saveAs: saveAsRaw.trim() } : {}),
+      options,
+    });
+  }
+  return out;
+}
+
+/** Maps an option id back to its label; unknown ids are kept as-is. */
+function optionLabel(step: DialogueStep | undefined, value: string): string {
+  if (!step) return value;
+  const label = step.options.find((option) => option.id === value)?.label.trim();
+  return label || value;
+}
+
+/** Human-readable version of one stored answer (multi values join with ", "). */
+function answerDisplay(
+  step: DialogueStep | undefined,
+  answer: string | string[],
+): string {
+  const values = Array.isArray(answer) ? answer : [answer];
+  return values
+    .map((value) => optionLabel(step, value))
+    .filter(Boolean)
+    .join(", ");
+}
+
+type ResolvedDialogueAnswers = {
+  name: string;
+  phone: string;
+  email: string;
+  message: string;
+  custom: Record<string, string>;
+};
+
+/**
+ * Rebuilds the lead fields from the raw step answers with option labels
+ * resolved. Returns null when the bot has no readable dialogue, so callers
+ * fall back to the values sent by the widget.
+ */
+function resolveDialogueAnswers(
+  steps: DialogueStep[],
+  answers: Record<string, string | string[]> | undefined,
+): ResolvedDialogueAnswers | null {
+  if (steps.length === 0 || !answers) return null;
+  const result: ResolvedDialogueAnswers = {
+    name: "",
+    phone: "",
+    email: "",
+    message: "",
+    custom: {},
+  };
+  for (const step of steps) {
+    if (!step.saveAs) continue;
+    const raw = answers[step.id];
+    if (raw == null) continue;
+    const value = answerDisplay(step, raw).trim();
+    if (!value) continue;
+    if (BUILTIN_SAVE_AS.has(step.saveAs)) {
+      result[step.saveAs as "name" | "phone" | "email" | "message"] = value;
+    } else {
+      result.custom[step.saveAs] = value;
+    }
+  }
+  return result;
+}
+
 /** Fills `{token}` placeholders from lead + custom fields. */
 export function fillDashboardWhatsAppTemplate(
   template: string,
@@ -45,22 +157,28 @@ export function fillDashboardWhatsAppTemplate(
 function valuesFromCustomDialogueLead(
   lead: LeadSubmission,
   botName: string,
+  dialogueSteps: DialogueStep[],
 ): Record<string, string> {
+  const resolved = resolveDialogueAnswers(dialogueSteps, lead.answers);
   return {
     bot: botName,
-    nome: lead.name ?? "",
-    telefone: lead.phone ?? "",
-    email: lead.email ?? "",
-    mensagem: lead.message ?? "",
+    nome: resolved?.name || lead.name || "",
+    telefone: resolved?.phone || lead.phone || "",
+    email: resolved?.email || lead.email || "",
+    mensagem: resolved?.message || lead.message || "",
     // Set by the widget when the visitor picks one of several offices.
     unidade: "",
     ...(lead.customFields ?? {}),
+    // Labels resolved from the dialogue win over raw option ids sent by
+    // older widgets.
+    ...(resolved?.custom ?? {}),
   };
 }
 
 function formatFromDashboardTemplate(
   lead: LeadSubmission,
   dashboardConfig: unknown,
+  dialogueSteps: DialogueStep[],
 ): string | null {
   if (!dashboardConfig || typeof dashboardConfig !== "object") return null;
   const config = dashboardConfig as DashboardBotConfig;
@@ -72,7 +190,7 @@ function formatFromDashboardTemplate(
       : "assistente";
   return fillDashboardWhatsAppTemplate(
     template,
-    valuesFromCustomDialogueLead(lead, botName),
+    valuesFromCustomDialogueLead(lead, botName, dialogueSteps),
   );
 }
 
@@ -81,15 +199,29 @@ export function formatStandardWhatsAppMessage(
   dashboardConfig?: unknown,
 ) {
   if (lead.flowMode === "custom_dialogue") {
-    const fromTemplate = formatFromDashboardTemplate(lead, dashboardConfig);
+    const dialogueSteps = readDialogueSteps(dashboardConfig);
+    const fromTemplate = formatFromDashboardTemplate(
+      lead,
+      dashboardConfig,
+      dialogueSteps,
+    );
     if (fromTemplate) return fromTemplate;
 
-    const lines = [`Oi, meu nome é ${lead.name}.`];
-    if (lead.message) lines.push(`Assunto: ${lead.message}.`);
-    if (lead.phone) lines.push(`Telefone: ${lead.phone}.`);
-    if (lead.email) lines.push(`E-mail: ${lead.email}.`);
-    if (lead.customFields) {
-      const extras = Object.entries(lead.customFields)
+    const resolved = resolveDialogueAnswers(dialogueSteps, lead.answers);
+    const name = resolved?.name || lead.name;
+    const message = resolved?.message || lead.message;
+    const phone = resolved?.phone || lead.phone;
+    const email = resolved?.email || lead.email;
+    const customFields = resolved
+      ? { ...lead.customFields, ...resolved.custom }
+      : lead.customFields;
+
+    const lines = [`Oi, meu nome é ${name}.`];
+    if (message) lines.push(`Assunto: ${message}.`);
+    if (phone) lines.push(`Telefone: ${phone}.`);
+    if (email) lines.push(`E-mail: ${email}.`);
+    if (customFields) {
+      const extras = Object.entries(customFields)
         .map(([key, value]) => `${key}: ${value}`)
         .filter(Boolean);
       if (extras.length > 0) {
@@ -97,8 +229,13 @@ export function formatStandardWhatsAppMessage(
       }
     }
     if (lead.answers) {
-      const extras = Object.values(lead.answers)
-        .map((value) => (Array.isArray(value) ? value.join(", ") : value))
+      const extras = Object.entries(lead.answers)
+        .map(([stepId, value]) =>
+          answerDisplay(
+            dialogueSteps.find((step) => step.id === stepId),
+            value,
+          ),
+        )
         .filter(Boolean);
       if (extras.length > 0) {
         lines.push(`Respostas: ${extras.join(" | ")}.`);
