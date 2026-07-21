@@ -9,13 +9,13 @@ export const LAUNCHER_AVATAR_PRESETS = [
     id: "robot",
     label: "Robô",
     description: "Animado e pronto para atender",
-    path: "/embed/robot-helper.png",
+    path: "/embed/robot-helper.webp",
   },
   {
     id: "robot-feminine",
     label: "Robô feminino",
     description: "Versão mais delicada e acolhedora",
-    path: "/embed/robot-helper-feminine.png",
+    path: "/embed/robot-helper-feminine.webp",
   },
 ] as const;
 
@@ -190,9 +190,12 @@ export function normalizeLauncher(raw: unknown): ChatbotLauncherConfig {
     // Migrate old photorealistic default to the cartoon robot.
     if (
       trimmed.endsWith("/embed/default-avatar.png") ||
-      trimmed === "/embed/default-avatar.png"
+      trimmed === "/embed/default-avatar.png" ||
+      trimmed === "/embed/robot-helper.png"
     ) {
       avatarUrl = null;
+    } else if (trimmed === "/embed/robot-helper-feminine.png") {
+      avatarUrl = "/embed/robot-helper-feminine.webp";
     } else {
       avatarUrl = trimmed;
     }

@@ -14,6 +14,7 @@ const baseFlow = defaultFlowForTemplate("patient-capture");
 
 const validInput: ChatbotInput = {
   name: "Dra. Renata Reis",
+  flowName: "Captação de pacientes",
   clientName: "Clínica Renata Reis",
   specialty: "Dermatologia",
   status: "active",
@@ -31,6 +32,7 @@ const validInput: ChatbotInput = {
   whatsappDestinations: [],
   whatsappRoutingQuestion: DEFAULT_WHATSAPP_ROUTING_QUESTION,
   whatsappMessageTemplate: DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
+  whatsappClosingMessage: "",
   launcherTeaserTexts: ["Olá! Posso te ajudar?"],
   launcherAvatarUrl: null,
   ...DEFAULT_EMBED,

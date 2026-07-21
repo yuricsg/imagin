@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { ChatAccess, Chatbot, Lead } from "@/lib/chatbots/types";
 import { ACCENTS } from "@/lib/chatbots/accents";
 import {
@@ -21,7 +20,6 @@ import {
   type ChannelReport,
   type PeriodDays,
   type TileMetric,
-  type TilePoint,
 } from "@/lib/bot-report";
 import { MetricsRow } from "./metrics-row";
 import { EmptyState } from "./ui";
@@ -32,17 +30,6 @@ const PERIOD_LABELS: Record<PeriodDays, string> = {
   30: "30 dias",
   90: "90 dias",
 };
-
-const dayFmt = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "short",
-});
-
-/** "2026-07-16" → "16 de jul." — parsed as local time, matching the buckets. */
-function formatDay(key: string): string {
-  const [year, month, day] = key.split("-").map(Number);
-  return dayFmt.format(new Date(year, month - 1, day));
-}
 
 /**
  * Resolves the bot before rendering the report. Bots created through the
@@ -156,7 +143,7 @@ export function BotReport({
       <div>
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 dark:text-zinc-400 dark:hover:text-zinc-200"
         >
           <IconArrowLeft className="size-3.5" />
           Voltar ao painel
@@ -192,9 +179,9 @@ export function BotReport({
                 type="button"
                 onClick={() => setDays(option)}
                 aria-pressed={days === option}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 ${
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 ${
                   days === option
-                    ? "bg-cyan-500 text-teal-950"
+                    ? "bg-teal-600 text-white"
                     : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 }`}
               >
@@ -288,7 +275,6 @@ function ChannelTile({
   metric: TileMetric;
 }) {
   const points = useMemo(() => tilePoints(series, metric), [series, metric]);
-  const isRate = metric === "conversion" || metric === "completion";
 
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white/90 p-4 shadow-sm dark:border-zinc-800/70 dark:bg-zinc-900/60">
@@ -303,54 +289,46 @@ function ChannelTile({
         {hint ?? ""}
       </p>
       {/* currentColor lets one hue follow the light/dark text token. */}
-      <div className="mt-2 h-10 text-cyan-600 dark:text-cyan-400">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={points} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-            <Tooltip
-              cursor={{ stroke: "currentColor", strokeWidth: 1, opacity: 0.35 }}
-              content={<TileTooltip label={label} isRate={isRate} />}
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="currentColor"
-              fillOpacity={0.1}
-              isAnimationActive={false}
-              activeDot={{ r: 4, strokeWidth: 2, className: "stroke-white dark:stroke-zinc-900" }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div className="mt-2 h-10 text-teal-600 dark:text-teal-400">
+        <Sparkline values={points.map((point) => point.value)} />
       </div>
     </div>
   );
 }
 
-/** Value leads, label follows — the reader already knows which tile they're on. */
-function TileTooltip({
-  active,
-  payload,
-  label: metricLabel,
-  isRate,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: TilePoint }>;
-  label: string;
-  isRate: boolean;
-}) {
-  const point = payload?.[0]?.payload;
-  if (!active || !point) return null;
+function Sparkline({ values }: { values: number[] }) {
+  const width = 160;
+  const height = 40;
+  const max = Math.max(...values, 0);
+  const range = max || 1;
+  const coordinates = values.map((value, index) => ({
+    x: values.length <= 1 ? width / 2 : (index / (values.length - 1)) * width,
+    y: height - 3 - (value / range) * (height - 6),
+  }));
+  const line = coordinates.map(({ x, y }) => `${x},${y}`).join(" ");
+  const area = coordinates.length
+    ? `M ${coordinates[0].x} ${height} L ${coordinates
+        .map(({ x, y }) => `${x} ${y}`)
+        .join(" L ")} L ${coordinates.at(-1)?.x ?? width} ${height} Z`
+    : "";
+
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 shadow-md dark:border-zinc-700 dark:bg-zinc-900">
-      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-        {isRate ? percentPrecise(point.value) : point.value}
-      </p>
-      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-        {metricLabel} · {formatDay(point.date)}
-      </p>
-    </div>
+    <svg
+      aria-hidden="true"
+      className="h-full w-full overflow-visible"
+      preserveAspectRatio="none"
+      viewBox={`0 0 ${width} ${height}`}
+    >
+      <path d={area} fill="currentColor" opacity="0.1" />
+      <polyline
+        fill="none"
+        points={line}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
   );
 }

@@ -82,7 +82,7 @@ components:
 
 ## Overview
 
-**The Operations Console** — a restrained product UI for agency operators managing capture chatbots and leads. Geist sans for all UI text; Geist Mono for embed URLs and technical snippets. The brand color is the **Imagin teal** sampled from the agency logo (`imagin-logo.png`): ambient teal radial wash on the page background (fixed, subtle). Surfaces are solid white panels (`bg-white`, dark `zinc-900/70`) with hairline borders (`border-zinc-200/80`); backdrop blur is reserved for the sticky header, sticky form footers, and modal scrims — never for static panels. Dark mode follows OS `prefers-color-scheme`.
+**The Operations Console** — a restrained product UI for agency operators managing capture chatbots and leads. Inter for all UI text; system mono for embed URLs and technical snippets. The brand color is the **Imagin teal** sampled from the agency logo (`imagin-logo.png`): ambient teal radial wash on the page background (fixed, subtle). Surfaces are solid white panels (`bg-white`, dark `zinc-900/70`) with hairline borders (`border-zinc-200/80`); backdrop blur is reserved for the sticky header, sticky form footers, and modal scrims — never for static panels. Dark mode follows OS `prefers-color-scheme`.
 
 Mood: calm, dense, trustworthy. Not a marketing site.
 
@@ -95,7 +95,7 @@ Mood: calm, dense, trustworthy. Not a marketing site.
 | Muted | `zinc-500`–`zinc-400` | Secondary labels, hints |
 | Primary | **Imagin teal** `teal-600` (#0d9488, hover `teal-700` #0f766e) | Primary actions, selection, focus rings — solid, never gradient |
 | Accent palette | indigo, violet, sky, emerald, amber, rose | Per-chatbot identity (`lib/chatbots/accents.ts`) — solid/tonal fills |
-| Site launcher | white bubble, ink text, indigo-soft avatar fallback, emerald online dot | Embed widget on client sites (`public/embed/widget.js`) |
+| Site launcher | white bubble, ink text, teal-soft avatar fallback (`#ccfbf1`), teal focus outline, emerald online dot | Embed widget on client sites (`public/embed/widget.js`) |
 | Error | `rose-500` border, `rose-600` text | Validation |
 
 **Teal is brand/action, not status.** Teal marks interactive affordances (CTAs, selected states, focus rings, brand tiles). Status positive (online dot, converted badge, success banners) stays `emerald/green`; validation stays `rose`. Never use teal for status semantics and never emerald for primary actions — the two greens must not collide.
@@ -104,9 +104,9 @@ Accent color is for identity dots, selected rows, and primary CTAs — not decor
 
 ## Typography
 
-- **One family (Geist)** for all product UI; no display/body pairing.
+- **One family (Inter)** for all product UI; no display/body pairing.
 - Scale: `text-lg` page title, `text-sm` body, `text-xs` labels and metadata, `text-[11px]` micro copy.
-- **Mono** (`font-mono`, Geist Mono) for embed URLs, script paths, derived bot ids.
+- **Mono** (`font-mono`, system mono) for embed URLs, script paths, derived bot ids.
 - Line length: prose hints max ~40ch; tables and toolbars may run wider.
 
 ## Elevation
@@ -124,6 +124,7 @@ No heavy drop shadows on static panels.
 - **Avatar**: `rounded-lg` initials chip with accent gradient fill.
 - **Empty state**: centered icon in zinc gradient tile + title + description.
 - **Modal**: bottom sheet on mobile (`rounded-t-2xl`), centered dialog on `sm+` (`max-w-lg`, `rounded-2xl`).
+- **Embedded chat** (`app/chatbots/[botId]/embed/chat-ui.tsx`): shared atoms (`ChatHeader`, `BubbleBot`, `BubbleUser`, `TypingDots`, `ChatOption`) + class constants (`CHAT_*`), brand `teal-600`, zinc neutrals, WhatsApp green `#25d366` untouched. Used by both `embedded-chatbot.tsx` and `custom-dialogue-chat.tsx` — extend there, never hard-code one-off hexes.
 - **Site launcher** (`public/embed/widget.js`): speech bubble + circular avatar + online status; Arial stack (host-site isolation); `rounded.dialog` bubble, `rounded.full` avatar; colors from `components.site-launcher`.
 
 ## Motion

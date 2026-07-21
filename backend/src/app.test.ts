@@ -277,9 +277,16 @@ test("lists configured chatbots and filters leads by bot", async () => {
     const matchingBody = await matchingResponse.json();
     const emptyResponse = await app.request("/api/leads?botId=outro-bot");
     const emptyBody = await emptyResponse.json();
+    const futureResponse = await app.request(
+      "/api/leads?from=2999-01-01&limit=10",
+    );
+    const futureBody = await futureResponse.json();
+    const invalidResponse = await app.request("/api/leads?limit=not-a-number");
 
     assert.equal(matchingBody.leads.length, 1);
     assert.equal(emptyBody.leads.length, 0);
+    assert.equal(futureBody.leads.length, 0);
+    assert.equal(invalidResponse.status, 400);
   } finally {
     await rm(tempDir, { force: true, recursive: true });
   }
@@ -511,6 +518,7 @@ test("creates a chatbot with private integration credentials", async () => {
     const publicBody = await publicResponse.json();
 
     assert.equal(publicResponse.status, 200);
+    assert.match(publicResponse.headers.get("cache-control") ?? "", /s-maxage=300/);
     assert.equal(publicBody.chatbot.name, "Clínica Teste");
     assert.equal(publicBody.chatbot.conversationFlow.key, "consultation_scheduling");
     assert.equal(JSON.stringify(publicBody).includes("secret-token"), false);

@@ -455,6 +455,21 @@ describe("DashboardHome — menu de ações do chatbot", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  it("opens the selected chatbot test from the actions menu", async () => {
+    const user = userEvent.setup();
+    seedLocal([localBot()]);
+    render(<DashboardHome data={makeData()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Ações de Dr. Caio Costa" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Testar chatbot" }),
+    );
+
+    expect(pushMock).toHaveBeenCalledWith("/chatbots/dr-caio-costa/embed");
+  });
+
   it("navigates menu items with arrow keys", async () => {
     const user = userEvent.setup();
     seedLocal([localBot()]);
@@ -464,6 +479,10 @@ describe("DashboardHome — menu de ações do chatbot", () => {
     );
 
     // Menu opens focused on the first item ("Ver desempenho").
+    await user.keyboard("{ArrowDown}");
+    expect(
+      screen.getByRole("menuitem", { name: "Testar chatbot" }),
+    ).toHaveFocus();
     await user.keyboard("{ArrowDown}");
     expect(screen.getByRole("menuitem", { name: "Editar" })).toHaveFocus();
     await user.keyboard("{ArrowDown}");
@@ -495,7 +514,7 @@ describe("DashboardHome — menu de ações do chatbot", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows only Duplicar in the menu for non-editable (server) bots", async () => {
+  it("keeps test, report and duplicate actions for non-editable server bots", async () => {
     const user = userEvent.setup();
     render(<DashboardHome data={makeData({ bots: [chatbotCatalog[0]] })} />);
 
@@ -506,6 +525,9 @@ describe("DashboardHome — menu de ações do chatbot", () => {
     );
     expect(
       screen.getByRole("menuitem", { name: "Duplicar" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Testar chatbot" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("menuitem", { name: "Editar" }),
@@ -628,7 +650,7 @@ describe("DashboardHome — funil real", () => {
     const user = userEvent.setup();
     render(<DashboardHome data={funnelData()} />);
     await user.click(screen.getAllByRole("button", { name: "Maria Real" })[0]);
-    const modal = screen.getByRole("dialog", { name: "Maria Real" });
+    const modal = await screen.findByRole("dialog", { name: "Maria Real" });
     expect(within(modal).getByText("https://cliente.example/cardio")).toBeInTheDocument();
     expect(within(modal).getAllByText("Ecocardiograma").length).toBeGreaterThan(0);
     expect(within(modal).getByText("medicalRequest")).toBeInTheDocument();

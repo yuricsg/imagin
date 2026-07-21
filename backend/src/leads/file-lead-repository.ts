@@ -5,18 +5,25 @@ import type {
   CreateLeadRecordInput,
   LeadRecord,
 } from "./types.js";
-import type { LeadRepository } from "./lead-repository.js";
+import type { LeadListOptions, LeadRepository } from "./lead-repository.js";
 import { deriveSubmittedLeadStatus } from "./lead-status.js";
 
 export class FileLeadRepository implements LeadRepository {
   constructor(private readonly filePath: string) {}
 
-  async list(): Promise<LeadRecord[]> {
+  async list(options: LeadListOptions = {}): Promise<LeadRecord[]> {
     try {
       const contents = await readFile(this.filePath, "utf8");
       const parsed = JSON.parse(contents);
 
-      return Array.isArray(parsed) ? parsed.map(coerceLeadRecord) : [];
+      const leads = Array.isArray(parsed) ? parsed.map(coerceLeadRecord) : [];
+      const filtered = leads
+        .filter((lead) => !options.botId || lead.botId === options.botId)
+        .filter((lead) => !options.clientId || lead.clientId === options.clientId)
+        .filter((lead) => !options.from || lead.createdAt >= options.from)
+        .filter((lead) => !options.to || lead.createdAt <= options.to)
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      return options.limit ? filtered.slice(0, options.limit) : filtered;
     } catch (error) {
       if (isMissingFileError(error)) {
         return [];

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -29,8 +30,7 @@ import { ChatbotList } from "./chatbot-list";
 import { EmbedBlock } from "./embed-block";
 import { LeadsToolbar } from "./leads-toolbar";
 import { LeadsTable } from "./leads-table";
-import { LeadDetailsModal } from "./lead-details-modal";
-import { CommandPalette, type CommandItem } from "./command-palette";
+import type { CommandItem } from "./command-palette";
 import { COMMAND_PALETTE_EVENT } from "./command-k-button";
 import { usePinnedCommands } from "./use-pinned-commands";
 import { useThemeOptional } from "./theme-provider";
@@ -47,6 +47,14 @@ import {
   IconPlus,
   IconSun,
 } from "./icons";
+
+const LeadDetailsModal = dynamic(() =>
+  import("./lead-details-modal").then((module) => module.LeadDetailsModal),
+);
+const CommandPalette = dynamic(
+  () => import("./command-palette").then((module) => module.CommandPalette),
+  { ssr: false },
+);
 
 export function DashboardHome({ data }: { data: DashboardData }) {
   const router = useRouter();
@@ -581,13 +589,15 @@ export function DashboardHome({ data }: { data: DashboardData }) {
         />
       ) : null}
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        commands={commands}
-        pinnedIds={pinnedIds}
-        onTogglePin={togglePin}
-      />
+      {paletteOpen ? (
+        <CommandPalette
+          open
+          onClose={() => setPaletteOpen(false)}
+          commands={commands}
+          pinnedIds={pinnedIds}
+          onTogglePin={togglePin}
+        />
+      ) : null}
     </main>
   );
 }

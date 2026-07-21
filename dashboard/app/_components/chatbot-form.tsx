@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { AccentKey, Chatbot, ChatbotStatus } from "@/lib/chatbots/types";
 import { ACCENTS, ACCENT_ORDER } from "@/lib/chatbots/accents";
@@ -11,7 +12,6 @@ import {
   duplicateChatbotInput,
   type ChatbotInput,
 } from "@/lib/chatbots/create";
-import { CustomDialogueChat } from "@/app/chatbots/[botId]/embed/custom-dialogue-chat";
 import type { ChatSessionTracker } from "@/app/chatbots/[botId]/embed/chat-session";
 import {
   buildFlowPreview,
@@ -81,6 +81,21 @@ import {
   IconSpinner,
   IconX,
 } from "./icons";
+
+const CustomDialogueChat = dynamic(
+  () =>
+    import("@/app/chatbots/[botId]/embed/custom-dialogue-chat").then(
+      (module) => module.CustomDialogueChat,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-96 items-center justify-center text-sm text-zinc-500">
+        Preparando conversa...
+      </div>
+    ),
+  },
+);
 import { LauncherPreview } from "./launcher-preview";
 
 const STATUS_ORDER: ChatbotStatus[] = ["active", "paused", "draft", "error"];

@@ -19,16 +19,35 @@ describe("lead report", () => {
       phone: "",
       email: "",
       status: "new",
+      leadId: null,
+      sessionId: null,
       message: "",
       sourceUrl: "https://example.test",
       attribution: { channel: "direct", utmSource: null, utmMedium: null, utmCampaign: null },
+      source: {},
       classification: { primary: "Consulta", details: [] },
       selectedExams: [],
       intent: null,
-      progress: { currentStep: "name", whatsappClickedAt: null },
+      medicalRequestStatus: null,
+      consultationNeed: null,
+      consultationDecision: null,
+      customFields: null,
+      answers: null,
+      progress: {
+        currentStep: "name",
+        openedAt: null,
+        lastActivityAt: null,
+        completedAt: null,
+        whatsappClickedAt: null,
+        appointmentRequestedAt: null,
+        convertedAt: null,
+      },
+      events: [],
       createdAt: "2026-07-14T12:00:00.000Z",
+      updatedAt: "2026-07-14T12:00:00.000Z",
       whatsappMessage: null,
-    } as Lead;
+      whatsappUrl: null,
+    } satisfies Lead;
     const bot = { id: "bot-1", name: "Bot", clientName: "Cliente" } as Chatbot;
     const csv = buildLeadsCsv([lead], { "bot-1": bot });
     expect(csv).toContain('"Maria, Silva"');

@@ -7,7 +7,10 @@ export default async function BotReportPage({
   params: Promise<{ botId: string }>;
 }) {
   const { botId } = await params;
-  const data = await getDashboardData();
+  const data = await getDashboardData({
+    botId,
+    recentDays: 90,
+  });
 
   // Bot resolution happens on the client so dashboard bots that live only in
   // localStorage (not yet persisted to the DB) still reach their report.

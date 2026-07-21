@@ -315,6 +315,12 @@ function BotActionsMenu({
       icon: <IconChartBar className="size-4" />,
       run: () => router.push(`/chatbots/${bot.id}`),
     },
+    {
+      id: "test",
+      label: "Testar chatbot",
+      icon: <IconBot className="size-4" />,
+      run: () => router.push(`/chatbots/${bot.id}/embed`),
+    },
     ...(onEdit
       ? [
           {

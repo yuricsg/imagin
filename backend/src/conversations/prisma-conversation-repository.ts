@@ -5,6 +5,7 @@ import type {
   ChatSessionRecord,
   ConversationRepository,
   CreateChatSessionInput,
+  SessionListOptions,
 } from "./types.js";
 import type { LeadIntent, LeadSource } from "../leads/types.js";
 
@@ -42,10 +43,23 @@ export class PrismaConversationRepository implements ConversationRepository {
     return row ? toSessionRecord(row) : null;
   }
 
-  async listSessions(): Promise<ChatSessionRecord[]> {
+  async listSessions(options: SessionListOptions = {}): Promise<ChatSessionRecord[]> {
     const rows = await this.prisma.chatSession.findMany({
+      where: {
+        ...(options.botId ? { botId: options.botId } : {}),
+        ...(options.clientId ? { clientId: options.clientId } : {}),
+        ...(options.from || options.to
+          ? {
+              openedAt: {
+                ...(options.from ? { gte: new Date(options.from) } : {}),
+                ...(options.to ? { lte: new Date(options.to) } : {}),
+              },
+            }
+          : {}),
+      },
       include: { events: { orderBy: { createdAt: "asc" } } },
       orderBy: { openedAt: "desc" },
+      ...(options.limit ? { take: options.limit } : {}),
     });
     return rows.map(toSessionRecord);
   }

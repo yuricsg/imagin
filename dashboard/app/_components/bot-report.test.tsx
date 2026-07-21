@@ -1,21 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import type { Chatbot } from "@/lib/chatbots/types";
 import { buildChatbot } from "@/lib/chatbots/create";
 import { BotReportClient } from "./bot-report";
-
-// The resolution logic is what we exercise here; the charts are not.
-vi.mock("recharts", () => {
-  const Passthrough = ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  );
-  return {
-    ResponsiveContainer: Passthrough,
-    AreaChart: Passthrough,
-    Area: () => null,
-    Tooltip: () => null,
-  };
-});
 
 function makeBot(id: string, name: string): Chatbot {
   const bot = buildChatbot(

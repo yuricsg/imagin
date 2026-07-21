@@ -6,6 +6,7 @@ import type {
   ChatSessionRecord,
   ConversationRepository,
   CreateChatSessionInput,
+  SessionListOptions,
 } from "./types.js";
 
 export class MemoryConversationRepository implements ConversationRepository {
@@ -44,10 +45,15 @@ export class MemoryConversationRepository implements ConversationRepository {
     return session ? cloneSession(session) : null;
   }
 
-  async listSessions(): Promise<ChatSessionRecord[]> {
-    return [...this.sessions.values()]
+  async listSessions(options: SessionListOptions = {}): Promise<ChatSessionRecord[]> {
+    const sessions = [...this.sessions.values()]
+      .filter((session) => !options.botId || session.botId === options.botId)
+      .filter((session) => !options.clientId || session.clientId === options.clientId)
+      .filter((session) => !options.from || session.openedAt >= options.from)
+      .filter((session) => !options.to || session.openedAt <= options.to)
       .map(cloneSession)
       .sort((left, right) => right.openedAt.localeCompare(left.openedAt));
+    return options.limit ? sessions.slice(0, options.limit) : sessions;
   }
 
   async appendEvent(

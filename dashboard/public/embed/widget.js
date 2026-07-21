@@ -11,7 +11,7 @@
   const apiBaseUrl = script.dataset.apiBaseUrl || appOrigin;
   const rootId = `imagin-widget-${botId}-${clientId}`;
   const DEFAULT_TEASER = "Olá! Posso te ajudar?";
-  const DEFAULT_AVATAR = `${appOrigin.replace(/\/$/, "")}/embed/robot-helper.png`;
+  const DEFAULT_AVATAR = `${appOrigin.replace(/\/$/, "")}/embed/robot-helper.webp`;
 
   if (document.getElementById(rootId)) {
     return;
@@ -46,7 +46,7 @@
       color: #18181b;
     }
     .imagin-launcher:focus-visible {
-      outline: 2px solid #6366f1;
+      outline: 2px solid #0d9488;
       outline-offset: 4px;
       border-radius: 16px;
     }
@@ -91,7 +91,7 @@
       height: 56px;
       border-radius: 999px;
       object-fit: cover;
-      background: #e0e7ff;
+      background: #ccfbf1;
       box-shadow: 0 8px 20px rgba(24, 24, 27, 0.2);
       border: 2px solid #ffffff;
     }
@@ -213,6 +213,24 @@
 
   let iframe = null;
   let textIndex = 0;
+  let teaserTimer = null;
+
+  function stopTeaserRotation() {
+    if (teaserTimer === null) return;
+    window.clearInterval(teaserTimer);
+    teaserTimer = null;
+  }
+
+  function syncTeaserRotation() {
+    stopTeaserRotation();
+    if (document.hidden || panel.dataset.open === "true" || teaserTexts.length < 2) {
+      return;
+    }
+    teaserTimer = window.setInterval(function () {
+      textIndex = (textIndex + 1) % teaserTexts.length;
+      bubbleText.textContent = teaserTexts[textIndex];
+    }, 4500);
+  }
 
   function ensureIframe() {
     if (iframe) {
@@ -242,11 +260,13 @@
     ensureIframe();
     panel.dataset.open = "true";
     launcher.setAttribute("aria-expanded", "true");
+    stopTeaserRotation();
   }
 
   function closePanel() {
     panel.dataset.open = "false";
     launcher.setAttribute("aria-expanded", "false");
+    syncTeaserRotation();
   }
 
   launcher.addEventListener("click", function () {
@@ -260,14 +280,7 @@
 
   close.addEventListener("click", closePanel);
 
-  window.setInterval(function () {
-    if (panel.dataset.open === "true" || teaserTexts.length < 2) {
-      return;
-    }
-
-    textIndex = (textIndex + 1) % teaserTexts.length;
-    bubbleText.textContent = teaserTexts[textIndex];
-  }, 4500);
+  document.addEventListener("visibilitychange", syncTeaserRotation);
 
   window.addEventListener("message", function (event) {
     if (!iframe || event.source !== iframe.contentWindow) {
@@ -287,70 +300,82 @@
     }
   });
 
-  fetch(`${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/config`)
-    .then(function (response) {
-      if (!response.ok) {
-        throw new Error("Chatbot config request failed");
-      }
-
-      return response.json();
+  function loadPublicConfig() {
+    fetch(`${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/config`, {
+      cache: "force-cache",
     })
-    .then(function (body) {
-      const chatbot = body && body.chatbot ? body.chatbot : null;
-      if (!chatbot) return;
-
-      const launcherConfig = chatbot.launcher;
-      const fromLauncher =
-        launcherConfig &&
-        Array.isArray(launcherConfig.teaserTexts) &&
-        launcherConfig.teaserTexts.length > 0
-          ? launcherConfig.teaserTexts.filter(function (entry) {
-              return typeof entry === "string" && entry.trim();
-            })
-          : null;
-      const fromButtons =
-        Array.isArray(chatbot.buttonTexts) && chatbot.buttonTexts.length > 0
-          ? chatbot.buttonTexts.filter(function (entry) {
-              return typeof entry === "string" && entry.trim();
-            })
-          : null;
-
-      if (fromLauncher || fromButtons) {
-        teaserTexts = fromLauncher || fromButtons;
-        textIndex = 0;
-        bubbleText.textContent = teaserTexts[0];
-      }
-
-      if (
-        launcherConfig &&
-        typeof launcherConfig.avatarUrl === "string" &&
-        launcherConfig.avatarUrl.trim()
-      ) {
-        var rawAvatar = launcherConfig.avatarUrl.trim();
-        // Data URLs and absolute URLs are used as-is; a leading-slash preset
-        // path is resolved against the app origin (not the client site).
-        if (
-          rawAvatar.indexOf("data:") === 0 ||
-          rawAvatar.indexOf("http://") === 0 ||
-          rawAvatar.indexOf("https://") === 0
-        ) {
-          avatarUrl = rawAvatar;
-        } else if (rawAvatar.charAt(0) === "/") {
-          avatarUrl = appOrigin.replace(/\/$/, "") + rawAvatar;
-        } else {
-          avatarUrl = rawAvatar;
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("Chatbot config request failed");
         }
-        avatar.src = avatarUrl;
-      }
-    })
-    .catch(function () {
-      // Keep the default teaser/avatar when public config is unavailable.
-    });
+
+        return response.json();
+      })
+      .then(function (body) {
+        const chatbot = body && body.chatbot ? body.chatbot : null;
+        if (!chatbot) return;
+
+        const launcherConfig = chatbot.launcher;
+        const fromLauncher =
+          launcherConfig &&
+          Array.isArray(launcherConfig.teaserTexts) &&
+          launcherConfig.teaserTexts.length > 0
+            ? launcherConfig.teaserTexts.filter(function (entry) {
+                return typeof entry === "string" && entry.trim();
+              })
+            : null;
+        const fromButtons =
+          Array.isArray(chatbot.buttonTexts) && chatbot.buttonTexts.length > 0
+            ? chatbot.buttonTexts.filter(function (entry) {
+                return typeof entry === "string" && entry.trim();
+              })
+            : null;
+
+        if (fromLauncher || fromButtons) {
+          teaserTexts = fromLauncher || fromButtons;
+          textIndex = 0;
+          bubbleText.textContent = teaserTexts[0];
+          syncTeaserRotation();
+        }
+
+        if (
+          launcherConfig &&
+          typeof launcherConfig.avatarUrl === "string" &&
+          launcherConfig.avatarUrl.trim()
+        ) {
+          var rawAvatar = launcherConfig.avatarUrl.trim();
+          // Data URLs and absolute URLs are used as-is; a leading-slash preset
+          // path is resolved against the app origin (not the client site).
+          if (
+            rawAvatar.indexOf("data:") === 0 ||
+            rawAvatar.indexOf("http://") === 0 ||
+            rawAvatar.indexOf("https://") === 0
+          ) {
+            avatarUrl = rawAvatar;
+          } else if (rawAvatar.charAt(0) === "/") {
+            avatarUrl = appOrigin.replace(/\/$/, "") + rawAvatar;
+          } else {
+            avatarUrl = rawAvatar;
+          }
+          avatar.src = avatarUrl;
+        }
+      })
+      .catch(function () {
+        // Keep the default teaser/avatar when public config is unavailable.
+      });
+  }
+
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(loadPublicConfig, { timeout: 1500 });
+  } else {
+    window.setTimeout(loadPublicConfig, 0);
+  }
 
   panel.appendChild(close);
   mount.appendChild(style);
   mount.appendChild(panel);
   mount.appendChild(launcher);
+  syncTeaserRotation();
 
   function collectAttribution() {
     const currentUrl = new URL(window.location.href);

@@ -50,7 +50,7 @@ describe("launcher helpers", () => {
         "https://app.imagin.app/",
       ),
     ).toBe(`https://app.imagin.app${DEFAULT_LAUNCHER_AVATAR_PATH}`);
-    expect(DEFAULT_LAUNCHER_AVATAR_PATH).toBe("/embed/robot-helper.png");
+    expect(DEFAULT_LAUNCHER_AVATAR_PATH).toBe("/embed/robot-helper.webp");
   });
 
   it("resolves preset paths relative to the app origin", () => {
@@ -58,11 +58,11 @@ describe("launcher helpers", () => {
       resolveLauncherAvatarUrl(
         {
           teaserTexts: ["Oi"],
-          avatarUrl: "/embed/robot-helper-feminine.png",
+          avatarUrl: "/embed/robot-helper-feminine.webp",
         },
         "https://app.imagin.app",
       ),
-    ).toBe("https://app.imagin.app/embed/robot-helper-feminine.png");
+    ).toBe("https://app.imagin.app/embed/robot-helper-feminine.webp");
   });
 
   it("prefers an absolute custom avatar URL when set", () => {
@@ -79,7 +79,7 @@ describe("launcher helpers", () => {
 
   it("matches built-in avatar presets", () => {
     expect(matchLauncherAvatarPreset(null)).toBe("robot");
-    expect(matchLauncherAvatarPreset("/embed/robot-helper-feminine.png")).toBe(
+    expect(matchLauncherAvatarPreset("/embed/robot-helper-feminine.webp")).toBe(
       "robot-feminine",
     );
     expect(LAUNCHER_AVATAR_PRESETS).toHaveLength(2);
@@ -95,18 +95,18 @@ describe("launcher helpers", () => {
     expect(
       buildLauncherFromInput({
         launcherTeaserTexts: ["A"],
-        launcherAvatarUrl: "/embed/robot-helper-feminine.png",
+        launcherAvatarUrl: "/embed/robot-helper-feminine.webp",
       }),
     ).toEqual({
       teaserTexts: ["A"],
-      avatarUrl: "/embed/robot-helper-feminine.png",
+      avatarUrl: "/embed/robot-helper-feminine.webp",
     });
   });
 
   it("resolves preview paths for relative and absolute URLs", () => {
     expect(resolveLauncherAvatarPath(null)).toBe(DEFAULT_LAUNCHER_AVATAR_PATH);
-    expect(resolveLauncherAvatarPath("/embed/robot-helper-feminine.png")).toBe(
-      "/embed/robot-helper-feminine.png",
+    expect(resolveLauncherAvatarPath("/embed/robot-helper-feminine.webp")).toBe(
+      "/embed/robot-helper-feminine.webp",
     );
   });
 });

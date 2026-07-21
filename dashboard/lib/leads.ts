@@ -24,9 +24,27 @@ export type LeadsResult = {
   error: string | null;
 };
 
-export async function getLeads(apiBaseUrl: string): Promise<LeadsResult> {
+export type LeadsQuery = {
+  botId?: string;
+  clientId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
+export async function getLeads(
+  apiBaseUrl: string,
+  query: LeadsQuery = {},
+): Promise<LeadsResult> {
   try {
-    const response = await fetch(`${apiBaseUrl}/api/leads`, {
+    const params = new URLSearchParams();
+    if (query.botId) params.set("botId", query.botId);
+    if (query.clientId) params.set("clientId", query.clientId);
+    if (query.from) params.set("from", query.from);
+    if (query.to) params.set("to", query.to);
+    if (query.limit) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`${apiBaseUrl}/api/leads${suffix}`, {
       cache: "no-store",
       next: { revalidate: 0 },
     });

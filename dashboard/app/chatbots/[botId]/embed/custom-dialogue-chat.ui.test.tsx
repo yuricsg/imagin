@@ -17,9 +17,11 @@ const FAREWELL_FRIENDLY = "Tudo bem! Se precisar, é só chamar por aqui. 😊";
 
 function trackerMock() {
   return {
-    ensureSession: vi.fn(async () => "sess-1"),
-    trackEvent: vi.fn(async () => {}),
-    flush: vi.fn(async () => {}),
+    ensureSession: vi.fn<ChatSessionTracker["ensureSession"]>(
+      async () => "sess-1",
+    ),
+    trackEvent: vi.fn<ChatSessionTracker["trackEvent"]>(async () => {}),
+    flush: vi.fn<ChatSessionTracker["flush"]>(async () => {}),
   } satisfies ChatSessionTracker;
 }
 

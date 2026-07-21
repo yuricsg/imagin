@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CreateLeadRecordInput, LeadRecord } from "./types.js";
-import type { LeadRepository } from "./lead-repository.js";
+import type { LeadListOptions, LeadRepository } from "./lead-repository.js";
 import {
   deriveSubmittedLeadStatus,
   normalizePersistedLeadStatus,
@@ -9,9 +9,22 @@ import {
 export class PrismaLeadRepository implements LeadRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async list(): Promise<LeadRecord[]> {
+  async list(options: LeadListOptions = {}): Promise<LeadRecord[]> {
     const rows = await this.prisma.lead.findMany({
+      where: {
+        ...(options.botId ? { botId: options.botId } : {}),
+        ...(options.clientId ? { clientId: options.clientId } : {}),
+        ...(options.from || options.to
+          ? {
+              createdAt: {
+                ...(options.from ? { gte: new Date(options.from) } : {}),
+                ...(options.to ? { lte: new Date(options.to) } : {}),
+              },
+            }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
+      ...(options.limit ? { take: options.limit } : {}),
     });
 
     return rows.map(toLeadRecord);

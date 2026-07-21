@@ -168,6 +168,7 @@ export function createApp(options: AppOptions = {}) {
       return c.json({ error: "Chatbot not found" }, 404);
     }
 
+    c.header("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
     return c.json({ chatbot: toPublicChatbotConfig(chatbot) });
   });
 
@@ -364,9 +365,22 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/leads", async (c) => {
     const botId = c.req.query("botId");
     const clientId = c.req.query("clientId");
+    const from = readDateQuery(c.req.query("from"));
+    const to = readDateQuery(c.req.query("to"), true);
+    const limit = readLimitQuery(c.req.query("limit"));
+    if (from === null || to === null || limit === null) {
+      return c.json({ error: "invalid from, to or limit query" }, 400);
+    }
+    const listOptions = {
+      ...(botId ? { botId } : {}),
+      ...(clientId ? { clientId } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      ...(limit ? { limit } : {}),
+    };
     const [leads, sessions] = await Promise.all([
-      leadRepository.list(),
-      conversationRepository.listSessions(),
+      leadRepository.list(listOptions),
+      conversationRepository.listSessions(listOptions),
     ]);
     const leadsById = new Map(leads.map((lead) => [lead.id, lead]));
     const sessionLeadIds = new Set<string>();
@@ -383,14 +397,12 @@ export function createApp(options: AppOptions = {}) {
       }
     }
 
+    const sortedLeads = dashboardLeads.sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
     return c.json({
-      leads: dashboardLeads
-        .filter((lead) => !botId || lead.botId === botId)
-        .filter((lead) => !clientId || lead.clientId === clientId)
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+      leads: limit ? sortedLeads.slice(0, limit) : sortedLeads,
       accesses: sessions
-        .filter((session) => !botId || session.botId === botId)
-        .filter((session) => !clientId || session.clientId === clientId)
         .map((session) => ({
           id: session.id,
           botId: session.botId,
@@ -572,6 +584,26 @@ function readRequiredString(
 
 function readOptionalString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readDateQuery(
+  value: string | undefined,
+  endOfDay = false,
+): string | undefined | null {
+  if (!value) return undefined;
+  const normalized =
+    endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? `${value}T23:59:59.999Z`
+      : value;
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function readLimitQuery(value: string | undefined): number | undefined | null {
+  if (!value) return undefined;
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return parsed >= 1 && parsed <= 500 ? parsed : null;
 }
 
 function readStringList(value: unknown) {

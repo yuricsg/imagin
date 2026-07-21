@@ -24,13 +24,13 @@ export function RobotLoader() {
   return (
     <div className="motion-enter flex flex-col items-center gap-4 py-10 text-center">
       <Image
-        src="/embed/robot-helper.png"
+        src="/embed/robot-helper.webp"
         alt=""
-        width={84}
+        width={56}
         height={56}
         priority
         aria-hidden="true"
-        className="motion-robot h-14 w-auto"
+        className="motion-robot size-14 object-contain"
       />
       <div
         aria-hidden="true"

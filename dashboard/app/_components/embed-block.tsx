@@ -28,7 +28,7 @@ export function EmbedBlock({ bot }: { bot: Chatbot }) {
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-zinc-200/70 bg-white/70 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/50">
+    <section className="overflow-hidden rounded-xl border border-zinc-200/70 bg-white dark:border-zinc-800/70 dark:bg-zinc-900">
       <header
         className={`flex items-center gap-3 border-b border-zinc-200/70 px-4 py-3 dark:border-zinc-800/70 ${accent.surface}`}
       >

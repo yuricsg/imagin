@@ -79,10 +79,18 @@ export type CreateChatSessionInput = {
   source: LeadSource;
 };
 
+export type SessionListOptions = {
+  botId?: string;
+  clientId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
 export interface ConversationRepository {
   createSession(input: CreateChatSessionInput): Promise<ChatSessionRecord>;
   getSession(id: string): Promise<ChatSessionRecord | null>;
-  listSessions(): Promise<ChatSessionRecord[]>;
+  listSessions(options?: SessionListOptions): Promise<ChatSessionRecord[]>;
   appendEvent(
     sessionId: string,
     input: ChatEventInput,
