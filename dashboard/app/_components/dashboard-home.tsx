@@ -527,7 +527,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
           </div>
         </section>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <ChatbotList
             bots={bots}
             activity={botActivity}

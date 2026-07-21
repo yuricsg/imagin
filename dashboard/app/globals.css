@@ -23,6 +23,16 @@
   color-scheme: dark;
 }
 
+html {
+  min-height: 100%;
+  overscroll-behavior-y: none;
+  background-color: #fafafa;
+}
+
+html.dark {
+  background-color: #09090b;
+}
+
 body {
   font-family: var(--font-inter), Inter, system-ui, sans-serif;
   background-image:
@@ -30,6 +40,13 @@ body {
     radial-gradient(38rem 28rem at -6% -6%, rgba(13, 148, 136, 0.06), transparent 55%);
   background-repeat: no-repeat;
   background-attachment: fixed;
+}
+
+@media (max-width: 767px) {
+  body {
+    /* Fixed backgrounds can expand the root scrolling layer in iOS WebViews. */
+    background-attachment: scroll;
+  }
 }
 
 :root.dark body {

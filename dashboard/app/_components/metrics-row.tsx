@@ -22,14 +22,14 @@ function MetricCard({
 }) {
   return (
     <div
-      className="motion-enter rounded-2xl border border-zinc-200/80 bg-white p-4 sm:p-5 dark:border-zinc-800/80 dark:bg-zinc-900/70"
+      className="motion-enter min-w-0 rounded-2xl border border-zinc-200/80 bg-white p-4 sm:p-5 dark:border-zinc-800/80 dark:bg-zinc-900/70"
       style={{ animationDelay: `${Math.min(index, 9) * STAGGER_MS}ms` }}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        <span className="min-w-0 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           {label}
         </span>
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500 max-[359px]:hidden dark:bg-zinc-800 dark:text-zinc-400">
           {icon}
         </span>
       </div>
@@ -92,7 +92,7 @@ export function MetricsRowSkeleton() {
         >
           <div className="flex items-start justify-between gap-2">
             <Skeleton className="h-3 w-24" />
-            <Skeleton className="size-9 rounded-xl" />
+            <Skeleton className="size-9 rounded-xl max-[359px]:hidden" />
           </div>
           <Skeleton className="mt-3 h-8 w-16" />
           <Skeleton className="mt-2 h-3 w-28" />
