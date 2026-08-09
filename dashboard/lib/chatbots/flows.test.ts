@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFlowPreview,
+  collectStatementRun,
   defaultFlowForTemplate,
   extractLeadFieldsFromAnswers,
   applyToneToDialogue,
@@ -470,5 +471,118 @@ describe("FLOW_END_NO_WHATSAPP (encerrar sem WhatsApp)", () => {
     expect(farewellMessageForTone("formal")).toBe(
       "Agradecemos o contato. Se precisar, estamos à disposição por aqui.",
     );
+  });
+});
+
+describe("etapas de mensagem (statement)", () => {
+  function statementDialogue(): DialogueFlow {
+    return {
+      version: 1,
+      shape: "linear",
+      greeting: "Olá!",
+      startStepId: "step-aviso",
+      steps: [
+        {
+          id: "step-aviso",
+          question: "Atendemos de segunda a sexta, das 8h às 18h.",
+          inputType: "statement",
+        },
+        {
+          id: "step-obs",
+          question: "Não realizamos atendimento de urgência.",
+          inputType: "statement",
+        },
+        {
+          id: "step-nome",
+          question: "Como posso te chamar?",
+          inputType: "text",
+          saveAs: "name",
+          required: true,
+        },
+      ],
+    };
+  }
+
+  it("collectStatementRun agrupa as mensagens até a próxima pergunta", () => {
+    const dialogue = statementDialogue();
+    expect(collectStatementRun(dialogue, "step-aviso")).toEqual({
+      lines: [
+        "Atendemos de segunda a sexta, das 8h às 18h.",
+        "Não realizamos atendimento de urgência.",
+      ],
+      stepId: "step-nome",
+    });
+    // Já em uma pergunta: nada a reproduzir antes dela.
+    expect(collectStatementRun(dialogue, "step-nome")).toEqual({
+      lines: [],
+      stepId: "step-nome",
+    });
+  });
+
+  it("collectStatementRun encerra quando só restam mensagens", () => {
+    const dialogue = statementDialogue();
+    dialogue.steps = dialogue.steps.slice(0, 2);
+    expect(collectStatementRun(dialogue, "step-aviso")).toEqual({
+      lines: [
+        "Atendemos de segunda a sexta, das 8h às 18h.",
+        "Não realizamos atendimento de urgência.",
+      ],
+      stepId: null,
+    });
+  });
+
+  it("a prévia mostra a mensagem sem resposta do visitante", () => {
+    const preview = buildFlowPreview(
+      {
+        ...defaultFlowForTemplate("patient-capture"),
+        dialogue: statementDialogue(),
+      },
+      { botName: "Bot", clientName: "Clínica" },
+    );
+    const aviso = preview.findIndex((m) =>
+      m.text.startsWith("Atendemos de segunda"),
+    );
+    expect(preview[aviso].role).toBe("bot");
+    expect(preview[aviso + 1]).toEqual({
+      role: "bot",
+      text: "Não realizamos atendimento de urgência.",
+    });
+  });
+
+  it("valida mensagens sem exigir opções e sem mapeamento", () => {
+    const dialogue = statementDialogue();
+    expect(validateDialogueFlow(dialogue)).toEqual([]);
+
+    dialogue.steps[0].question = "   ";
+    expect(validateDialogueFlow(dialogue)).toContainEqual({
+      stepId: "step-aviso",
+      message: "Informe o texto da mensagem.",
+    });
+  });
+
+  it("normalizeDialogue preserva o tipo e descarta o saveAs da mensagem", () => {
+    const normalized = normalizeDialogue({
+      version: 1,
+      shape: "linear",
+      greeting: "",
+      startStepId: "step-aviso",
+      steps: [
+        {
+          id: "step-aviso",
+          question: "Aviso importante.",
+          inputType: "statement",
+          saveAs: "message",
+        },
+        {
+          id: "step-nome",
+          question: "Seu nome?",
+          inputType: "text",
+          saveAs: "name",
+        },
+      ],
+    });
+    expect(normalized?.steps[0].inputType).toBe("statement");
+    expect(normalized?.steps[0].saveAs).toBeUndefined();
+    expect(normalized?.steps[0].options).toBeUndefined();
   });
 });

@@ -13,8 +13,15 @@ export type FlowTemplateId =
 /** How the clinic bills — drives the convênio question in the conversation. */
 export type InsuranceMode = "particular" | "convenio" | "both";
 
-/** Input widget for a dialogue step. */
-export type FlowInputType = "text" | "single_choice" | "multi_choice";
+/**
+ * Input widget for a dialogue step. `statement` is an informational bubble:
+ * the bot says it and moves on by itself, with no answer from the visitor.
+ */
+export type FlowInputType =
+  | "text"
+  | "single_choice"
+  | "multi_choice"
+  | "statement";
 
 /** Linear sequence vs option-driven branching. */
 export type FlowShape = "linear" | "branching";
@@ -40,6 +47,7 @@ export interface FlowStepOption {
 
 export interface FlowStep {
   id: string;
+  /** The bot bubble: a question, or the message text when inputType is statement. */
   question: string;
   inputType: FlowInputType;
   /** Required when inputType is single_choice or multi_choice. */
@@ -121,7 +129,15 @@ export const FLOW_INPUT_TYPE_LABELS: Record<FlowInputType, string> = {
   text: "Campo de texto",
   single_choice: "Uma opção",
   multi_choice: "Várias opções",
+  statement: "Mensagem (sem resposta)",
 };
+
+/** True for steps the bot only says — the visitor answers nothing. */
+export function isStatementStep(
+  step: Pick<FlowStep, "inputType"> | undefined | null,
+): boolean {
+  return step?.inputType === "statement";
+}
 
 export const FLOW_MAPS_TO_LABELS: Record<FlowMapsTo, string> = {
   name: "Nome do lead",
@@ -821,6 +837,16 @@ function buildDialoguePreview(
     const step: FlowStep = byId.get(currentId)!;
     messages.push({ role: "bot", text: step.question });
 
+    if (isStatementStep(step)) {
+      // Informational bubble: no visitor answer, the bot just continues.
+      const index = dialogue.steps.findIndex((s) => s.id === currentId);
+      currentId =
+        index >= 0 && index < dialogue.steps.length - 1
+          ? dialogue.steps[index + 1].id
+          : undefined;
+      continue;
+    }
+
     if (isChoiceType(step.inputType) && step.options && step.options.length > 0) {
       const option = step.options[0];
       messages.push({ role: "visitor", text: option.label });
@@ -911,6 +937,33 @@ export function resolveNextStepId(
   return next?.id ?? null;
 }
 
+/**
+ * Walks from `startStepId` collecting the bubbles the bot says on its own —
+ * every statement step it passes through — and stops at the first step that
+ * actually asks something. Returns the texts to play plus that step's id
+ * (null when the flow ends without another question). Visited ids are tracked
+ * so a mis-wired loop of statements can never hang the widget.
+ */
+export function collectStatementRun(
+  dialogue: DialogueFlow,
+  startStepId: string | null | undefined,
+): { lines: string[]; stepId: string | null } {
+  const lines: string[] = [];
+  const visited = new Set<string>();
+  let currentId = startStepId ?? null;
+
+  while (currentId) {
+    const step = getDialogueStep(dialogue, currentId);
+    if (!step || visited.has(currentId)) return { lines, stepId: null };
+    visited.add(currentId);
+    if (!isStatementStep(step)) return { lines, stepId: currentId };
+    if (step.question.trim()) lines.push(step.question);
+    currentId = resolveNextStepId(dialogue, currentId);
+  }
+
+  return { lines, stepId: null };
+}
+
 /** Maps accumulated answers into known lead fields + custom categories. */
 export function extractLeadFieldsFromAnswers(
   dialogue: DialogueFlow,
@@ -987,7 +1040,9 @@ export function validateDialogueFlow(
     if (!step.question.trim()) {
       issues.push({
         stepId: step.id,
-        message: "Informe o texto da pergunta.",
+        message: isStatementStep(step)
+          ? "Informe o texto da mensagem."
+          : "Informe o texto da pergunta.",
       });
     }
 
@@ -1058,7 +1113,8 @@ export function normalizeDialogue(raw: unknown): DialogueFlow | undefined {
     const inputType =
       step.inputType === "text" ||
       step.inputType === "single_choice" ||
-      step.inputType === "multi_choice"
+      step.inputType === "multi_choice" ||
+      step.inputType === "statement"
         ? step.inputType
         : "text";
     const optionsRaw = Array.isArray(step.options) ? step.options : [];
@@ -1074,12 +1130,15 @@ export function normalizeDialogue(raw: unknown): DialogueFlow | undefined {
           typeof o.nextStepId === "string" ? o.nextStepId : undefined,
       });
     }
+    // Statements collect nothing, so any stored saveAs is dropped.
     const saveAsRaw =
-      typeof step.saveAs === "string"
-        ? step.saveAs.trim()
-        : typeof step.mapsTo === "string"
-          ? step.mapsTo.trim()
-          : "";
+      inputType === "statement"
+        ? ""
+        : typeof step.saveAs === "string"
+          ? step.saveAs.trim()
+          : typeof step.mapsTo === "string"
+            ? step.mapsTo.trim()
+            : "";
     const saveAs = saveAsRaw || undefined;
     const mapsTo = isBuiltinSaveAs(saveAs) ? saveAs : undefined;
     steps.push({

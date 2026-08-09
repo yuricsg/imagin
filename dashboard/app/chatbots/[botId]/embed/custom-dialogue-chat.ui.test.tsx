@@ -218,3 +218,85 @@ describe("CustomDialogueChat — encerramento sem WhatsApp", () => {
     20000,
   );
 });
+
+/** Linear bot with an informational bubble between the two questions. */
+function makeStatementBot(): Chatbot {
+  const bot = makeBot();
+  const dialogue: DialogueFlow = {
+    version: 1,
+    shape: "linear",
+    greeting: "Olá!",
+    startStepId: "step-interesse",
+    steps: [
+      {
+        id: "step-interesse",
+        question: "Posso te ajudar a agendar?",
+        inputType: "single_choice",
+        required: true,
+        options: [{ id: "opt-sim", label: "Quero agendar" }],
+      },
+      {
+        id: "step-aviso",
+        question: "Atendemos de segunda a sexta, das 8h às 18h.",
+        inputType: "statement",
+      },
+      {
+        id: "step-nome",
+        question: "Qual é o seu nome?",
+        inputType: "text",
+        saveAs: "name",
+        required: true,
+      },
+    ],
+  };
+  return { ...bot, flow: { ...bot.flow, dialogue } } as Chatbot;
+}
+
+describe("CustomDialogueChat — mensagem sem resposta", () => {
+  it(
+    "envia a mensagem sozinho e abre a próxima pergunta",
+    async () => {
+      const user = userEvent.setup();
+      const tracker = trackerMock();
+      vi.stubGlobal("fetch", vi.fn());
+      render(
+        <CustomDialogueChat
+          bot={makeStatementBot()}
+          botId="bot-1"
+          clientId="client-1"
+          source={{}}
+          sessionTracker={tracker}
+        />,
+      );
+
+      await user.click(
+        await screen.findByRole(
+          "button",
+          { name: "Quero agendar" },
+          { timeout: 8000 },
+        ),
+      );
+
+      expect(
+        await screen.findByText(/Atendemos de segunda a sexta/, undefined, {
+          timeout: 8000,
+        }),
+      ).toBeInTheDocument();
+      // A conversa segue sozinha até a pergunta seguinte.
+      expect(
+        await screen.findByRole("textbox", undefined, { timeout: 8000 }),
+      ).toBeInTheDocument();
+      // Nada é registrado como resposta do visitante para a mensagem.
+      const events = tracker.trackEvent.mock.calls.map(([event]) => event);
+      expect(
+        events.some(
+          (event) =>
+            event.type === "answer_submitted" &&
+            "stepId" in event &&
+            event.stepId === "step-aviso",
+        ),
+      ).toBe(false);
+    },
+    20000,
+  );
+});

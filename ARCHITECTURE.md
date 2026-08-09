@@ -123,7 +123,8 @@ and removes the QA data even if an assertion fails.
 New bots created on `/chatbots/new` (or edited on `/chatbots/[botId]/edit`) can define a `DialogueFlow` stored on `Chatbot.flow.dialogue`:
 
 - `shape`: `linear` (fixed step order) or `branching` (each single-choice option may point to another step or end).
-- `steps[]`: each step has `question`, `inputType` (`text` | `single_choice` | `multi_choice`), optional `options`, and optional `mapsTo` (`name` | `phone` | `email` | `message`).
+- `steps[]`: each step has `question`, `inputType` (`text` | `single_choice` | `multi_choice` | `statement`), optional `options`, and optional `mapsTo` (`name` | `phone` | `email` | `message`).
+- `statement` steps are informational: the bot says `question` and moves on by itself, with no input widget, no `options`, no `saveAs` (dropped by `normalizeDialogue`) and no `answers` entry. `collectStatementRun` groups every statement the flow passes through and returns the next step that actually asks something, so the widget plays them as separate bubbles before opening that input. A statement's successor always follows array order; only choice steps branch. The builder adds them with "+ Adicionar mensagem". Bubbles render with `whitespace-pre-line` (widget `BubbleBot`/`BubbleUser` and the builder preview), so line breaks typed in a step stay inside the same bubble.
 - `greeting` / `startStepId`: opening message and first step after greeting.
 
 **Runtime rule:** if `dashboardConfig.flow.dialogue` is present with `version: 1` and at least one step, the embed widget runs the generic dialogue interpreter. Bots without `dialogue` (including Dra. Renata Reis and older dashboard bots) keep the legacy intent-based cardiology state machine.

@@ -30,6 +30,7 @@ import {
   INSURANCE_MODE_ORDER,
   applyToneToDialogue,
   isBuiltinSaveAs,
+  isStatementStep,
   labelForSaveAs,
   MEDICAL_SPECIALTIES,
   resolveStepSaveAs,
@@ -164,6 +165,7 @@ const INPUT_TYPE_ORDER: FlowInputType[] = [
   "text",
   "single_choice",
   "multi_choice",
+  "statement",
 ];
 
 const SHAPE_GUIDE_STORAGE_KEY = "imagin:shape-guide-dismissed";
@@ -639,13 +641,14 @@ export function ChatbotForm({
     }));
   }
 
-  function addDialogueStep() {
+  function addDialogueStep(inputType: FlowInputType = "text") {
     updateDialogue((prev) => {
+      const isStatement = inputType === "statement";
       const step: FlowStep = {
         id: createFlowId("step"),
-        question: "Nova pergunta",
-        inputType: "text",
-        required: true,
+        question: isStatement ? "Nova mensagem" : "Nova pergunta",
+        inputType,
+        required: !isStatement,
       };
       const steps = [...prev.steps, step];
       return {
@@ -732,8 +735,19 @@ export function ChatbotForm({
       ...prev,
       steps: prev.steps.map((s) => {
         if (s.id !== stepId) return s;
+        if (inputType === "statement") {
+          // Nothing is asked, so no options, no mapping and never required.
+          return {
+            ...s,
+            inputType,
+            options: undefined,
+            saveAs: undefined,
+            mapsTo: undefined,
+            required: false,
+          };
+        }
         if (inputType === "text") {
-          return { ...s, inputType, options: undefined };
+          return { ...s, inputType, options: undefined, required: true };
         }
         const options =
           s.options && s.options.length >= 2
@@ -742,7 +756,7 @@ export function ChatbotForm({
                 { id: createFlowId("opt"), label: "Opção 1" },
                 { id: createFlowId("opt"), label: "Opção 2" },
               ];
-        return { ...s, inputType, options };
+        return { ...s, inputType, options, required: true };
       }),
     }));
   }
@@ -1356,15 +1370,25 @@ export function ChatbotForm({
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-2">
                           <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
-                            Perguntas do diálogo
+                            Etapas do diálogo
                           </span>
-                          <button
-                            type="button"
-                            onClick={addDialogueStep}
-                            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                          >
-                            + Adicionar pergunta
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => addDialogueStep("text")}
+                              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                            >
+                              + Adicionar pergunta
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => addDialogueStep("statement")}
+                              title="Uma mensagem que o bot envia sozinho, sem esperar resposta"
+                              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                            >
+                              + Adicionar mensagem
+                            </button>
+                          </div>
                         </div>
                         {fieldErrors.flowDialogue ? (
                           <p className="text-xs text-rose-600 dark:text-rose-400">
@@ -1422,7 +1446,9 @@ export function ChatbotForm({
 
                               <label className="block space-y-1">
                                 <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
-                                  Pergunta
+                                  {isStatementStep(dialogueStep)
+                                    ? "Mensagem"
+                                    : "Pergunta"}
                                 </span>
                                 <textarea
                                   value={dialogueStep.question}
@@ -1431,7 +1457,12 @@ export function ChatbotForm({
                                       question: e.target.value,
                                     })
                                   }
-                                  rows={2}
+                                  rows={isStatementStep(dialogueStep) ? 3 : 2}
+                                  placeholder={
+                                    isStatementStep(dialogueStep)
+                                      ? "Use Enter para quebrar a linha dentro do mesmo balão"
+                                      : undefined
+                                  }
                                   className={`${inputClass(false)} resize-none`}
                                 />
                               </label>
@@ -1458,6 +1489,13 @@ export function ChatbotForm({
                                     ))}
                                   </select>
                                 </label>
+                                {isStatementStep(dialogueStep) ? (
+                                  <p className="self-end text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                                    O bot envia esta mensagem e segue para a
+                                    próxima etapa sozinho — o visitante não
+                                    responde nada.
+                                  </p>
+                                ) : (
                                 <div className="block space-y-1">
                                   <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
                                     Salvar como
@@ -1552,9 +1590,11 @@ export function ChatbotForm({
                                     </p>
                                   ) : null}
                                 </div>
+                                )}
                               </div>
 
-                              {dialogueStep.inputType !== "text" ? (
+                              {dialogueStep.inputType === "single_choice" ||
+                              dialogueStep.inputType === "multi_choice" ? (
                                 <div className="mt-3 space-y-2">
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
@@ -3224,7 +3264,7 @@ function FlowPreview({
             className={`flex ${message.role === "visitor" ? "justify-end" : "justify-start"}`}
           >
             <p
-              className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line ${
                 message.role === "bot"
                   ? "rounded-bl-md bg-white text-zinc-800 ring-1 ring-zinc-200/80 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700/80"
                   : "rounded-br-md bg-teal-600 text-white"

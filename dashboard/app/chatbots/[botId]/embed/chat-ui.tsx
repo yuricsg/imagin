@@ -62,7 +62,8 @@ export function BubbleBot({ children }: { children: ReactNode }) {
       <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0d9488] text-[10px] font-bold text-white">
         A
       </div>
-      <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-zinc-100 px-3 py-2 text-sm leading-6 text-zinc-800">
+      {/* pre-line keeps the operator's line breaks inside a single bubble. */}
+      <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-zinc-100 px-3 py-2 text-sm leading-6 whitespace-pre-line text-zinc-800">
         {children}
       </div>
     </div>
@@ -72,7 +73,7 @@ export function BubbleBot({ children }: { children: ReactNode }) {
 export function BubbleUser({ children }: { children: ReactNode }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-[#0d9488] px-3 py-2 text-sm leading-6 text-white">
+      <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-[#0d9488] px-3 py-2 text-sm leading-6 whitespace-pre-line text-white">
         {children}
       </div>
     </div>

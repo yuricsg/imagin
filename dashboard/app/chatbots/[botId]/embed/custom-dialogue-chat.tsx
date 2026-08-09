@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Chatbot } from "@/lib/chatbots/types";
 import {
+  collectStatementRun,
   extractLeadFieldsFromAnswers,
   farewellMessageForTone,
   getDialogueStep,
@@ -162,11 +163,13 @@ export function CustomDialogueChat({
       botName: bot.name,
       clientName: bot.clientName,
     });
-    const first = getDialogueStep(
+    // Statement steps before the first question are played straight away.
+    const run = collectStatementRun(
       dialogue,
       dialogue.startStepId || dialogue.steps[0]?.id || "",
     );
-    const lines = first ? [greeting, first.question] : [greeting];
+    const first = run.stepId ? getDialogueStep(dialogue, run.stepId) : null;
+    const lines = [greeting, ...run.lines, ...(first ? [first.question] : [])];
     void playBotMessages(lines, () => {
       if (first) {
         setCurrentStepId(first.id);
@@ -368,13 +371,21 @@ export function CustomDialogueChat({
       void endWithFarewell();
       return;
     }
-    const nextStep = nextId ? getDialogueStep(dialogue, nextId) : null;
-    if (!nextId || !nextStep) {
-      endDialogue(nextAnswers);
+    // Statements between two questions are spoken before the next input opens.
+    const run = collectStatementRun(dialogue, nextId);
+    const nextStep = run.stepId ? getDialogueStep(dialogue, run.stepId) : null;
+    if (!nextStep) {
+      if (run.lines.length === 0) {
+        endDialogue(nextAnswers);
+        return;
+      }
+      void playBotMessages(run.lines, () => endDialogue(nextAnswers));
       return;
     }
-    setCurrentStepId(nextId);
-    void playBotMessages([nextStep.question], () => setUiStep("step"));
+    setCurrentStepId(nextStep.id);
+    void playBotMessages([...run.lines, nextStep.question], () =>
+      setUiStep("step"),
+    );
   }
 
   function submitText() {
