@@ -250,7 +250,8 @@
     iframe.title = "Assistente de agendamento";
     iframe.src = url.toString();
     iframe.allow = "clipboard-write";
-    iframe.sandbox = "allow-forms allow-popups allow-same-origin allow-scripts";
+    iframe.sandbox =
+      "allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts";
     panel.appendChild(iframe);
 
     return iframe;
