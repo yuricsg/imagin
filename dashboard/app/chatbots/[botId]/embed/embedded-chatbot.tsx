@@ -524,7 +524,9 @@ export function EmbeddedChatbot({
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-white font-sans text-[#18181b]">
+    // Fixed height (not min-) so the message list scrolls inside the panel
+    // instead of growing the document past what the iframe can show.
+    <div className="flex h-[100dvh] flex-col bg-white font-sans text-[#18181b]">
       {/* Header */}
       <ChatHeader
         name={config.name}
@@ -640,7 +642,10 @@ export function EmbeddedChatbot({
               })}
             </div>
             {/* Botão fixo dentro do scroll, sempre visível */}
-            <div ref={bottomRef} className="pt-1">
+            <div
+              ref={bottomRef}
+              className="sticky bottom-0 -mx-4 bg-white px-4 pb-1 pt-2"
+            >
               <button
                 type="button"
                 disabled={selectedExams.length === 0}

@@ -414,7 +414,9 @@ export function CustomDialogueChat({
   return (
     <div
       className={`flex flex-col bg-white font-sans text-[#18181b] ${
-        preview ? "h-full min-h-104" : "min-h-dvh"
+        // Fixed height (not min-) so the message list scrolls inside the
+        // panel instead of growing the document past what the iframe shows.
+        preview ? "h-full min-h-104" : "h-dvh"
       }`}
     >
       <ChatHeader name={bot.name} subtitle={bot.specialty || "Assistente"} />
@@ -509,17 +511,21 @@ export function CustomDialogueChat({
                     );
                   })}
                 </div>
-                <button
-                  type="button"
-                  disabled={multiSelected.length === 0}
-                  onClick={confirmMulti}
-                  className="w-full rounded-xl bg-[#0d9488] py-3 text-sm font-semibold text-white transition hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Continuar
-                  {multiSelected.length > 0
-                    ? ` (${multiSelected.length})`
-                    : ""}
-                </button>
+                {/* Fixo no rodapé do scroll: sempre visível enquanto o
+                    visitante percorre a lista de opções. */}
+                <div className="sticky bottom-0 -mx-4 bg-white px-4 pb-1 pt-2">
+                  <button
+                    type="button"
+                    disabled={multiSelected.length === 0}
+                    onClick={confirmMulti}
+                    className="w-full rounded-xl bg-[#0d9488] py-3 text-sm font-semibold text-white transition hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Continuar
+                    {multiSelected.length > 0
+                      ? ` (${multiSelected.length})`
+                      : ""}
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>

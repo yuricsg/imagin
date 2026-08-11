@@ -140,11 +140,36 @@
     }
     .imagin-frame {
       width: 100%;
-      height: min(640px, calc(100vh - 122px));
-      min-height: 560px;
+      height: min(640px, calc(100vh - 132px));
+      min-height: min(560px, calc(100vh - 132px));
       border: 0;
       display: block;
       background: #ffffff;
+    }
+    .imagin-loading {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: #ffffff;
+      color: #52525b;
+      font: 500 13px/1.4 Arial, Helvetica, sans-serif;
+    }
+    .imagin-loading[data-hidden="true"] { display: none; }
+    .imagin-spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid #e4e4e7;
+      border-top-color: #0d9488;
+      border-radius: 50%;
+      animation: imagin-spin 0.8s linear infinite;
+    }
+    @keyframes imagin-spin {
+      to { transform: rotate(360deg); }
     }
     @media (max-width: 480px) {
       .imagin-launcher {
@@ -245,6 +270,16 @@
     url.searchParams.set("pageUrl", window.location.href);
     url.searchParams.set("attribution", JSON.stringify(attribution));
 
+    const loading = document.createElement("div");
+    loading.className = "imagin-loading";
+    const spinner = document.createElement("span");
+    spinner.className = "imagin-spinner";
+    const loadingText = document.createElement("span");
+    loadingText.textContent = "Carregando assistente…";
+    loading.appendChild(spinner);
+    loading.appendChild(loadingText);
+    panel.appendChild(loading);
+
     iframe = document.createElement("iframe");
     iframe.className = "imagin-frame";
     iframe.title = "Assistente de agendamento";
@@ -252,6 +287,9 @@
     iframe.allow = "clipboard-write";
     iframe.sandbox =
       "allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts";
+    iframe.addEventListener("load", function () {
+      loading.dataset.hidden = "true";
+    });
     panel.appendChild(iframe);
 
     return iframe;
@@ -283,6 +321,23 @@
 
   document.addEventListener("visibilitychange", syncTeaserRotation);
 
+  // The frame never grows past what the visitor's viewport can show —
+  // otherwise the panel's overflow:hidden clips the bottom of the chat
+  // (options list / "Continuar") with no way to reach it.
+  let lastContentHeight = 640;
+
+  function applyFrameHeight() {
+    if (!iframe) {
+      return;
+    }
+    const available = Math.max(320, window.innerHeight - 132);
+    const max = Math.min(720, available);
+    const min = Math.min(560, available);
+    iframe.style.height = `${Math.min(Math.max(lastContentHeight, min), max)}px`;
+  }
+
+  window.addEventListener("resize", applyFrameHeight);
+
   window.addEventListener("message", function (event) {
     if (!iframe || event.source !== iframe.contentWindow) {
       return;
@@ -297,7 +352,8 @@
     const height = Number(data.height);
 
     if (Number.isFinite(height)) {
-      iframe.style.height = `${Math.min(Math.max(height, 560), 720)}px`;
+      lastContentHeight = height;
+      applyFrameHeight();
     }
   });
 
@@ -365,6 +421,23 @@
         // Keep the default teaser/avatar when public config is unavailable.
       });
   }
+
+  function warmUpApi() {
+    // Wakes a sleeping API instance (e.g. Render free tier) while the visitor
+    // is still browsing, so the chat is responsive by the time it opens.
+    // no-store: the config request below may be served from HTTP cache and
+    // never reach the server, so this ping must always hit it.
+    try {
+      fetch(`${apiBaseUrl.replace(/\/$/, "")}/health`, {
+        mode: "no-cors",
+        cache: "no-store",
+      }).catch(function () {});
+    } catch (error) {
+      // Ignore — the warm-up is best-effort.
+    }
+  }
+
+  warmUpApi();
 
   if ("requestIdleCallback" in window) {
     window.requestIdleCallback(loadPublicConfig, { timeout: 1500 });
