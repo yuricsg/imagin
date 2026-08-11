@@ -88,6 +88,14 @@ type EmbeddedChatbotProps = {
   pageUrl?: string;
   parentOrigin?: string;
   initialSource: LeadSource;
+  /**
+   * Widget preload: the iframe was created before the visitor opened the
+   * panel. Config and assets load right away, but the intro and the tracking
+   * session wait for the widget's `imagin:open` message — otherwise every
+   * page view would count as a chat session and the typing intro would play
+   * while the panel is still hidden.
+   */
+  preloaded?: boolean;
 };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -200,7 +208,10 @@ export function EmbeddedChatbot({
   initialSource,
   pageUrl,
   parentOrigin,
+  preloaded = false,
 }: EmbeddedChatbotProps) {
+  // Preloaded frames idle until the widget says the panel was opened.
+  const [started, setStarted] = useState(!preloaded);
   const [config, setConfig] = useState<ChatbotConfig>(fallbackConfig);
   const [activeStep, setActiveStep] = useState<Step>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -306,7 +317,21 @@ export function EmbeddedChatbot({
   }, [clearScheduledMessages]);
 
   useEffect(() => {
-    if (isConfigLoading || configError || introStartedRef.current) return;
+    if (started) return;
+    function onParentMessage(event: MessageEvent) {
+      if (event.source !== window.parent) return;
+      if (parentOrigin && event.origin !== parentOrigin) return;
+      const data = event.data as { type?: string } | null;
+      if (data && data.type === "imagin:open") {
+        setStarted(true);
+      }
+    }
+    window.addEventListener("message", onParentMessage);
+    return () => window.removeEventListener("message", onParentMessage);
+  }, [started, parentOrigin]);
+
+  useEffect(() => {
+    if (!started || isConfigLoading || configError || introStartedRef.current) return;
     const bot = resolveDashboardBot(config);
     if (bot && hasCustomDialogue(bot.flow)) return;
     introStartedRef.current = true;
@@ -314,7 +339,7 @@ export function EmbeddedChatbot({
       void playBotMessages(resolveIntroMessages(config), () => setActiveStep("name"));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [config, configError, isConfigLoading, playBotMessages]);
+  }, [started, config, configError, isConfigLoading, playBotMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -353,8 +378,10 @@ export function EmbeddedChatbot({
     [botId, clientId, source],
   );
   useEffect(() => {
+    // Only visitors who actually open the panel become tracked sessions.
+    if (!started) return;
     void sessionTracker.ensureSession();
-  }, [sessionTracker]);
+  }, [started, sessionTracker]);
   const allowedIntents = config.conversationFlow?.intents ?? fallbackConfig.conversationFlow.intents;
   const canScheduleExam = allowedIntents.includes("schedule_exam");
   const canScheduleConsultation = allowedIntents.includes("schedule_consultation");
@@ -374,6 +401,7 @@ export function EmbeddedChatbot({
         source={source}
         parentOrigin={parentOrigin}
         sessionTracker={sessionTracker}
+        started={started}
       />
     );
   }

@@ -56,6 +56,12 @@ type Props = {
    * A no-op sessionTracker keeps event calls harmless in this mode.
    */
   preview?: boolean;
+  /**
+   * Widget preload gate: false while the iframe was preloaded but the panel
+   * hasn't been opened yet — the intro waits so the typing animation plays
+   * in front of the visitor. EmbeddedChatbot flips it on `imagin:open`.
+   */
+  started?: boolean;
 };
 
 export function CustomDialogueChat({
@@ -66,6 +72,7 @@ export function CustomDialogueChat({
   parentOrigin,
   sessionTracker,
   preview = false,
+  started = true,
 }: Props) {
   const dialogue = bot.flow.dialogue as DialogueFlow;
   const [uiStep, setUiStep] = useState<DialogueUiStep>("idle");
@@ -157,7 +164,7 @@ export function CustomDialogueChat({
   }, [clearScheduled]);
 
   useEffect(() => {
-    if (introStartedRef.current) return;
+    if (!started || introStartedRef.current) return;
     introStartedRef.current = true;
     const greeting = resolveGreeting(bot.flow, {
       botName: bot.name,
@@ -178,7 +185,7 @@ export function CustomDialogueChat({
         setUiStep("complete");
       }
     });
-  }, [bot, dialogue, playBotMessages]);
+  }, [started, bot, dialogue, playBotMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

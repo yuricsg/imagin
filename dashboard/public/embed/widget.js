@@ -269,6 +269,8 @@
     url.searchParams.set("parentOrigin", window.location.origin);
     url.searchParams.set("pageUrl", window.location.href);
     url.searchParams.set("attribution", JSON.stringify(attribution));
+    // The page idles (no intro, no tracking session) until imagin:open.
+    url.searchParams.set("preload", "1");
 
     const loading = document.createElement("div");
     loading.className = "imagin-loading";
@@ -288,11 +290,31 @@
     iframe.sandbox =
       "allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts";
     iframe.addEventListener("load", function () {
+      iframeLoaded = true;
       loading.dataset.hidden = "true";
+      // Covers the click-before-load race: the open signal sent by openPanel
+      // is lost when the page isn't there yet, so re-send it once it is.
+      notifyOpen();
     });
     panel.appendChild(iframe);
 
     return iframe;
+  }
+
+  // Tells the (possibly preloaded) chat page the visitor actually opened the
+  // panel — only then it starts the intro and the tracking session. Duplicate
+  // signals are no-ops on the page side.
+  let iframeLoaded = false;
+
+  function notifyOpen() {
+    if (!iframe || !iframeLoaded || panel.dataset.open !== "true") {
+      return;
+    }
+    try {
+      iframe.contentWindow.postMessage({ type: "imagin:open" }, appOrigin);
+    } catch (error) {
+      // Ignore — worst case the next openPanel/load event resends it.
+    }
   }
 
   function openPanel() {
@@ -300,6 +322,7 @@
     panel.dataset.open = "true";
     launcher.setAttribute("aria-expanded", "true");
     stopTeaserRotation();
+    notifyOpen();
   }
 
   function closePanel() {
@@ -444,6 +467,29 @@
   } else {
     window.setTimeout(loadPublicConfig, 0);
   }
+
+  function schedulePreload() {
+    // Preload the chat page while the panel is still closed so opening it is
+    // instant. Waits for the site's own load + a beat of idle time to never
+    // compete with the client page's critical resources. The page knows it
+    // was preloaded (preload=1) and idles until the imagin:open signal.
+    function preloadNow() {
+      if ("requestIdleCallback" in window) {
+        window.requestIdleCallback(ensureIframe, { timeout: 4000 });
+      } else {
+        ensureIframe();
+      }
+    }
+    if (document.readyState === "complete") {
+      window.setTimeout(preloadNow, 2000);
+    } else {
+      window.addEventListener("load", function () {
+        window.setTimeout(preloadNow, 2000);
+      });
+    }
+  }
+
+  schedulePreload();
 
   panel.appendChild(close);
   mount.appendChild(style);

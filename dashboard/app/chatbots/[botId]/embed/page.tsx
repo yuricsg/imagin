@@ -26,6 +26,7 @@ export default async function ChatbotEmbedPage({ params, searchParams }: PagePro
       pageUrl={readQueryParam(query.pageUrl)}
       parentOrigin={readQueryParam(query.parentOrigin)}
       initialSource={readAttribution(query.attribution)}
+      preloaded={readQueryParam(query.preload) === "1"}
     />
   );
 }
