@@ -195,23 +195,33 @@ Use a small script loader on the client site that injects an iframe-hosted widge
 
 Example client install snippet (domains come from the bot's `embed` config —
 `NEXT_PUBLIC_APP_BASE_URL` / `NEXT_PUBLIC_API_BASE_URL` on the dashboard,
-falling back to the current production deploys, Vercel + Render):
+falling back to the current production deploys, both on Railway):
 
 ```html
-<link rel="preconnect" href="https://imagin-virid.vercel.app" crossorigin>
-<link rel="preconnect" href="https://imagin-v587.onrender.com" crossorigin>
+<link rel="preconnect" href="https://dashboard-imagin.up.railway.app" crossorigin>
+<link rel="preconnect" href="https://api-imagin.up.railway.app" crossorigin>
 <script
-  src="https://imagin-virid.vercel.app/embed/widget.js?v=RELEASE_VERSION"
-  data-api-base-url="https://imagin-v587.onrender.com"
+  src="https://dashboard-imagin.up.railway.app/embed/widget.js?v=RELEASE_VERSION"
+  data-api-base-url="https://api-imagin.up.railway.app"
   data-bot-id="dra-renata-reis"
   data-client-id="client_id"
 ></script>
 ```
 
-`DEFAULT_EMBED` once pointed at aspirational `*.imagin.app` domains that were
-never configured in DNS; bots saved with exactly those values are healed to
-the current defaults when `normalizeStoredChatbot` reads them (custom values
-are untouched), and the healed value persists on the next save.
+`DEFAULT_EMBED` has pointed at two retired sets of domains: the aspirational
+`*.imagin.app` pair that was never configured in DNS, and the Vercel + Render
+deploys used before hosting moved to Railway. Bots saved with exactly any of
+those values are healed to the current defaults when `normalizeStoredChatbot`
+reads them (custom values are untouched), and the healed value persists on the
+next save. Healing fixes the snippet the dashboard *generates*; the `<script>`
+already pasted into a client's site still has to be replaced by hand, which is
+the argument for putting a custom domain in front of the platform host.
+
+**Auth outside Vercel:** `lib/auth.ts` sets `trustHost: true`. Auth.js only
+auto-trusts the forwarded host when it detects Vercel; on Railway it otherwise
+rejects sign-in with `UntrustedHost` and builds callback URLs from the
+container's internal address (`localhost:8080`), bouncing operators to
+localhost after a successful login.
 
 The script should:
 

@@ -51,8 +51,8 @@ Smoke read-only contra producao:
 
 ```bash
 node qa/qa-agent.mjs \
-  --dashboard-url=https://imagin-virid.vercel.app \
-  --api-url=https://imagin-v587.onrender.com \
+  --dashboard-url=https://dashboard-imagin.up.railway.app \
+  --api-url=https://api-imagin.up.railway.app \
   --bot-id=dra-renata-reis
 ```
 

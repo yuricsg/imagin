@@ -1,6 +1,9 @@
 {
   "name": "backend-imagin",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",

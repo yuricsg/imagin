@@ -264,8 +264,10 @@ describe("whatsappClosingMessage (encerramento editável)", () => {
 describe("embed defaults e cura do domínio legado", () => {
   it("falls back to the real deploys when no env is set", () => {
     // vitest runs without NEXT_PUBLIC_* set — fallbacks must be the live deploys.
-    expect(DEFAULT_EMBED.apiBaseUrl).toBe("https://imagin-v587.onrender.com");
-    expect(DEFAULT_EMBED.appBaseUrl).toBe("https://imagin-virid.vercel.app");
+    expect(DEFAULT_EMBED.apiBaseUrl).toBe("https://api-imagin.up.railway.app");
+    expect(DEFAULT_EMBED.appBaseUrl).toBe(
+      "https://dashboard-imagin.up.railway.app",
+    );
     expect(DEFAULT_EMBED.scriptPath).toBe("/embed/widget.js");
   });
 
@@ -282,6 +284,20 @@ describe("embed defaults e cura do domínio legado", () => {
     expect(normalized?.embed.apiBaseUrl).toBe(DEFAULT_EMBED.apiBaseUrl);
     expect(normalized?.embed.appBaseUrl).toBe(DEFAULT_EMBED.appBaseUrl);
     expect(normalized?.embed.scriptPath).toBe("/embed/widget.js");
+  });
+
+  it("heals the retired Render/Vercel deploys on read", () => {
+    const normalized = normalizeStoredChatbot({
+      id: "bot-x",
+      name: "Bot X",
+      embed: {
+        apiBaseUrl: "https://imagin-v587.onrender.com",
+        appBaseUrl: "https://imagin-virid.vercel.app/", // trailing-slash variant
+        scriptPath: "/embed/widget.js",
+      },
+    });
+    expect(normalized?.embed.apiBaseUrl).toBe(DEFAULT_EMBED.apiBaseUrl);
+    expect(normalized?.embed.appBaseUrl).toBe(DEFAULT_EMBED.appBaseUrl);
   });
 
   it("does not touch custom embed URLs", () => {

@@ -18,6 +18,13 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  /**
+   * Auth.js only auto-trusts the forwarded host when it detects Vercel. On
+   * Railway (and any other host) it otherwise rejects sign-in with
+   * UntrustedHost and derives callback URLs from the container's internal
+   * address, redirecting operators to localhost after a successful login.
+   */
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [

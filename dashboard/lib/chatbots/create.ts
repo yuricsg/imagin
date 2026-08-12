@@ -79,22 +79,43 @@ function cleanStringList(value: unknown): string[] {
 }
 
 /**
- * Aspirational embed domains that shipped as DEFAULT_EMBED before the real
- * deploys existed — they were never configured in DNS (NXDOMAIN).
+ * Every domain that was once a DEFAULT_EMBED value, per field:
+ *
+ * - `api.imagin.app` / `app.imagin.app`: aspirational domains that shipped
+ *   before the real deploys existed — never configured in DNS (NXDOMAIN).
+ * - `imagin-v587.onrender.com` / `imagin-virid.vercel.app`: the Render + Vercel
+ *   deploys, retired when hosting moved to Railway.
+ *
+ * A stored value equal to any of these was written by an old default, not
+ * chosen by the operator, so it is safe to heal.
  */
 const LEGACY_EMBED_DEFAULT_URLS = {
-  apiBaseUrl: "https://api.imagin.app",
-  appBaseUrl: "https://app.imagin.app",
+  apiBaseUrl: [
+    "https://api.imagin.app",
+    "https://imagin-v587.onrender.com",
+  ],
+  appBaseUrl: [
+    "https://app.imagin.app",
+    "https://imagin-virid.vercel.app",
+  ],
 } as const;
 
 /**
- * Bots saved while DEFAULT_EMBED pointed at the legacy domains carry the
- * broken URL inside dashboardConfig. Heal exactly those values (with or
- * without a trailing slash) to the current default on read — custom values
- * are never touched, and the healed value persists on the next save.
+ * Bots saved while DEFAULT_EMBED pointed at a retired domain carry that URL
+ * inside dashboardConfig, so their generated snippet would keep pointing at a
+ * host that no longer serves them. Heal exactly those values (with or without
+ * a trailing slash) to the current default on read — custom values are never
+ * touched, and the healed value persists on the next save.
  */
-function healLegacyEmbedUrl(value: string, legacy: string, current: string): string {
-  return value === legacy || value === `${legacy}/` ? current : value;
+function healLegacyEmbedUrl(
+  value: string,
+  legacyUrls: readonly string[],
+  current: string,
+): string {
+  const trimmed = value.replace(/\/$/, "");
+  return legacyUrls.some((legacy) => legacy.replace(/\/$/, "") === trimmed)
+    ? current
+    : value;
 }
 
 /**
@@ -257,13 +278,14 @@ export function normalizeStoredChatbot(raw: unknown): Chatbot | null {
 /**
  * Sensible embed defaults pre-filled in the creation form. Driven by env so
  * each deploy points at itself; the fallbacks are the current production
- * deploys (dashboard on Vercel, API on Render).
+ * deploys (both on Railway).
  */
 export const DEFAULT_EMBED = {
   apiBaseUrl:
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://imagin-v587.onrender.com",
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api-imagin.up.railway.app",
   appBaseUrl:
-    process.env.NEXT_PUBLIC_APP_BASE_URL ?? "https://imagin-virid.vercel.app",
+    process.env.NEXT_PUBLIC_APP_BASE_URL ??
+    "https://dashboard-imagin.up.railway.app",
   scriptPath: "/embed/widget.js",
 };
 
