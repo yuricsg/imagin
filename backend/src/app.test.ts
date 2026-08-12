@@ -246,6 +246,39 @@ test("allows localhost dashboard ports during development", async () => {
   }
 });
 
+test("allows public config reads from customer sites without opening admin routes", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-cors-"));
+
+  try {
+    const app = createApp({
+      chatbotRepository: new FileChatbotRepository(path.join(tempDir, "chatbots.json")),
+      leadRepository: new FileLeadRepository(path.join(tempDir, "leads.json")),
+      trackingService: noOpTrackingService,
+    });
+    const customerOrigin = "https://customer.example";
+    const publicResponse = await app.request(
+      "/api/public/chatbots/dra-renata-reis/config",
+      { headers: new Headers({ Origin: customerOrigin }) },
+    );
+    const adminResponse = await app.request("/api/chatbots", {
+      headers: new Headers({ Origin: customerOrigin }),
+    });
+
+    assert.equal(publicResponse.status, 200);
+    assert.equal(
+      publicResponse.headers.get("access-control-allow-origin"),
+      "*",
+    );
+    assert.equal(publicResponse.headers.get("cache-control"), "no-store");
+    assert.notEqual(
+      adminResponse.headers.get("access-control-allow-origin"),
+      customerOrigin,
+    );
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("lists configured chatbots and filters leads by bot", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "imagin-leads-"));
 
@@ -518,7 +551,7 @@ test("creates a chatbot with private integration credentials", async () => {
     const publicBody = await publicResponse.json();
 
     assert.equal(publicResponse.status, 200);
-    assert.match(publicResponse.headers.get("cache-control") ?? "", /s-maxage=300/);
+    assert.equal(publicResponse.headers.get("cache-control"), "no-store");
     assert.equal(publicBody.chatbot.name, "Clínica Teste");
     assert.equal(publicBody.chatbot.conversationFlow.key, "consultation_scheduling");
     assert.equal(JSON.stringify(publicBody).includes("secret-token"), false);

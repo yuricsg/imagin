@@ -4,6 +4,7 @@ import {
   DEFAULT_WHATSAPP_MESSAGE_TEMPLATE,
   DEFAULT_WHATSAPP_ROUTING_QUESTION,
   fillWhatsAppTemplate,
+  findUnknownWhatsAppTemplateTokens,
   isValidWhatsAppPhone,
   needsWhatsAppRouting,
   normalizeWhatsAppDestinations,
@@ -31,6 +32,44 @@ describe("whatsapp", () => {
       telefone: "11999990000",
     });
     expect(result).toBe("Olá Ana, tel 11999990000");
+  });
+
+  it("drops placeholder-only lines for unanswered dialogue branches", () => {
+    const result = resolveWhatsAppMessage(
+      "Name: {nome}\n{exame} {solicitacao}\n{quem} {motivo}",
+      "Bot",
+      {
+        nome: "Gardenia",
+        exame: "Mapa 24h, Holter 24h",
+        solicitacao: "No medical request",
+      },
+      {
+        exame: "Exam",
+        solicitacao: "Medical request",
+        quem: "Patient",
+        motivo: "Reason",
+      },
+    );
+
+    expect(result).toBe(
+      "Name: Gardenia\nMapa 24h, Holter 24h No medical request",
+    );
+  });
+
+  it("preserves intentional blank lines and unknown placeholders", () => {
+    expect(fillWhatsAppTemplate("Hello {nome}\n\nDetails", { nome: "Ana" })).toBe(
+      "Hello Ana\n\nDetails",
+    );
+    expect(fillWhatsAppTemplate("Hello {typo}", {})).toBe("Hello {typo}");
+  });
+
+  it("reports only placeholders that are not offered by the editor", () => {
+    expect(
+      findUnknownWhatsAppTemplateTokens(
+        "{nome} {exame} {typo} {typo}",
+        { exame: "Exam" },
+      ),
+    ).toEqual(["typo"]);
   });
 
   it("builds disabled config without phone", () => {

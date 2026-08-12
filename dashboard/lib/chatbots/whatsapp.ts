@@ -287,10 +287,44 @@ export function fillWhatsAppTemplate(
     ...(knownTokens ?? []),
     ...Object.keys(values),
   ]);
-  return template.replace(/\{([a-zA-Z0-9_-]+)\}/g, (match, token: string) => {
-    if (!known.has(token)) return match;
-    return values[token]?.trim() ?? "";
-  });
+  return template
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const placeholders = [...line.matchAll(/\{([a-zA-Z0-9_-]+)\}/g)];
+      const resolved = line.replace(
+        /\{([a-zA-Z0-9_-]+)\}/g,
+        (match, token: string) => {
+          if (!known.has(token)) return match;
+          return values[token]?.trim() ?? "";
+        },
+      );
+      const containsOnlyPlaceholders =
+        placeholders.length > 0 &&
+        line.replace(/\{([a-zA-Z0-9_-]+)\}/g, "").trim().length === 0;
+
+      return containsOnlyPlaceholders && !resolved.trim()
+        ? []
+        : [resolved];
+    })
+    .join("\n");
+}
+
+/** Returns template variables that are neither built-in nor defined by the dialogue. */
+export function findUnknownWhatsAppTemplateTokens(
+  template: string,
+  customSaveLabels?: Record<string, string> | null,
+): string[] {
+  const known = new Set([
+    ...WHATSAPP_BUILTIN_VARIABLES.map((variable) => variable.token),
+    ...Object.keys(customSaveLabels ?? {}),
+  ]);
+  return [
+    ...new Set(
+      [...template.matchAll(/\{([a-zA-Z0-9_-]+)\}/g)]
+        .map((match) => match[1])
+        .filter((token) => !known.has(token)),
+    ),
+  ];
 }
 
 /** Example message for the form preview (does not affect production). */

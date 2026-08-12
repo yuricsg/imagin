@@ -144,6 +144,13 @@ Dashboard bots store `Chatbot.launcher`:
 
 On create/update, the dashboard API mirrors `launcher.teaserTexts` into backend `buttonTexts` for compatibility. Public config (`GET /api/public/chatbots/:botId/config`) exposes `launcher` (from `dashboardConfig.launcher`, falling back to `buttonTexts`).
 
+The public config route is intentionally readable from any customer-site origin
+(`Access-Control-Allow-Origin: *`) because the loader runs outside the Imagin
+domain. This exception applies only to the exact read-only config route;
+administrative APIs remain restricted to `CORS_ORIGINS`. The response and the
+loader fetch both use `no-store`, so saved launcher text and avatar changes are
+visible after a customer-site reload.
+
 `flow.tone` (`friendly` | `formal`) rewrites stock dialogue copy when the operator toggles tone in the wizard: greeting, template prompts (service/insurance/etc.), contact-field questions, and the closing line. Operator-edited questions are left unchanged. Templates expose `greetingsByTone` / `promptsByTone`; `applyToneToDialogue(dialogue, tone, templateId)` applies the swap.
 
 ### Operational flow name (`flowName`)
@@ -191,8 +198,10 @@ Example client install snippet (domains come from the bot's `embed` config —
 falling back to the current production deploys, Vercel + Render):
 
 ```html
+<link rel="preconnect" href="https://imagin-virid.vercel.app" crossorigin>
+<link rel="preconnect" href="https://imagin-v587.onrender.com" crossorigin>
 <script
-  src="https://imagin-virid.vercel.app/embed/widget.js"
+  src="https://imagin-virid.vercel.app/embed/widget.js?v=RELEASE_VERSION"
   data-api-base-url="https://imagin-v587.onrender.com"
   data-bot-id="dra-renata-reis"
   data-client-id="client_id"
@@ -209,10 +218,30 @@ The script should:
 - Render the floating site launcher as a speech bubble + avatar (not a plain pill button).
 - Rotate `launcher.teaserTexts` (or legacy `buttonTexts`) every few seconds while the panel is closed.
 - Use `launcher.avatarUrl` when set; otherwise `/embed/robot-helper.png` from the app origin. Built-in presets also include `/embed/robot-helper-feminine.png`.
-- Create an iframe only when the widget is opened, unless preloading is explicitly enabled.
+- Preload the iframe 900 ms after the client page finishes loading, or immediately
+  after the visitor's first interaction. Data Saver and 2G connections stay
+  on-demand so the widget does not spend constrained mobile bandwidth.
 - Pass only public configuration to the iframe.
 - Use `postMessage` for parent/iframe resize, open, close, and analytics events.
 - Avoid storing sensitive data on the client site.
+
+Generated snippets append `WIDGET_SCRIPT_VERSION` as the loader's `v` query
+parameter. `widget.js` may therefore retain long-lived CDN caching while each
+loader release receives a new URL.
+
+The loader targets `/embed/chat`, a Pages Router shell that has no request-time
+data dependency and is emitted as static HTML. It is cached at the CDN edge and
+reads bot/client/attribution parameters after hydration. The historical
+`/chatbots/:botId/embed` App Router route remains available for backward
+compatibility.
+
+The loader starts the public config request once, uses it for the teaser/avatar,
+and hands the same public JSON to the static iframe through `postMessage`. The
+iframe announces `imagin:config-ready` before accepting `imagin:config`, verifies
+the bot ID and expected shape, and falls back to its own config request after
+five seconds or when the loader reports `imagin:config-unavailable`. This keeps
+old/cached loader combinations functional while removing the duplicate request
+from the current path.
 
 The iframe should:
 
@@ -259,6 +288,14 @@ widgets fall back to their tone-based defaults (friendly/formal); when set, the
 custom text always wins and is never rewritten by later tone changes. It only
 applies with `whatsapp.enabled` and persists inside the existing
 `dashboardConfig` JSON, so no migration is needed.
+
+WhatsApp placeholders are split into built-in variables and custom dialogue
+`saveAs` variables. In branching dialogues, every configured custom variable is
+known even when its branch was not visited. Unanswered variables resolve to an
+empty value, and a line made only of unanswered placeholders is omitted from the
+handoff message. Placeholders that are not built-in and do not belong to the
+dialogue are rejected by the editor as configuration errors rather than being
+sent literally to WhatsApp.
 
 ## Suggested Routes
 

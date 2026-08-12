@@ -21,6 +21,7 @@ export default async function ChatbotEmbedPage({ params, searchParams }: PagePro
 
   return (
     <EmbeddedChatbot
+      key={botId}
       botId={botId}
       clientId={readQueryParam(query.clientId) ?? "unknown-client"}
       pageUrl={readQueryParam(query.pageUrl)}

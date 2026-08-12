@@ -148,10 +148,26 @@ export function fillDashboardWhatsAppTemplate(
   template: string,
   values: Record<string, string>,
 ): string {
-  return template.replace(/\{([a-zA-Z0-9_-]+)\}/g, (match, token: string) => {
-    if (!(token in values)) return match;
-    return values[token]?.trim() ?? "";
-  });
+  return template
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const placeholders = [...line.matchAll(/\{([a-zA-Z0-9_-]+)\}/g)];
+      const resolved = line.replace(
+        /\{([a-zA-Z0-9_-]+)\}/g,
+        (match, token: string) => {
+          if (!(token in values)) return match;
+          return values[token]?.trim() ?? "";
+        },
+      );
+      const containsOnlyPlaceholders =
+        placeholders.length > 0 &&
+        line.replace(/\{([a-zA-Z0-9_-]+)\}/g, "").trim().length === 0;
+
+      return containsOnlyPlaceholders && !resolved.trim()
+        ? []
+        : [resolved];
+    })
+    .join("\n");
 }
 
 function valuesFromCustomDialogueLead(
@@ -160,6 +176,13 @@ function valuesFromCustomDialogueLead(
   dialogueSteps: DialogueStep[],
 ): Record<string, string> {
   const resolved = resolveDialogueAnswers(dialogueSteps, lead.answers);
+  const unansweredCustomFields = Object.fromEntries(
+    dialogueSteps.flatMap((step) =>
+      step.saveAs && !BUILTIN_SAVE_AS.has(step.saveAs)
+        ? [[step.saveAs, ""]]
+        : [],
+    ),
+  );
   return {
     bot: botName,
     nome: resolved?.name || lead.name || "",
@@ -168,6 +191,10 @@ function valuesFromCustomDialogueLead(
     mensagem: resolved?.message || lead.message || "",
     // Set by the widget when the visitor picks one of several offices.
     unidade: "",
+    // A branching flow only answers the fields on the visited path. Define all
+    // dialogue variables up front so unvisited branches resolve to blank text
+    // instead of leaking raw placeholders into WhatsApp.
+    ...unansweredCustomFields,
     ...(lead.customFields ?? {}),
     // Labels resolved from the dialogue win over raw option ids sent by
     // older widgets.

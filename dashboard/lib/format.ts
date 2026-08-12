@@ -38,6 +38,9 @@ const percentFmt = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 
+/** Change whenever the public loader changes so installed snippets bypass stale CDN copies. */
+export const WIDGET_SCRIPT_VERSION = "2026-08-12-2";
+
 /**
  * Percent that keeps up to two decimals. Channel rates are often below 1% —
  * rounding those to whole percent would report 0,55% as 1%.
@@ -65,16 +68,24 @@ export function slugify(value: string): string {
 
 /** The exact `<script>` a client pastes into their site to mount the widget. */
 export function embedSnippet(bot: Chatbot): string {
-  const src = `${bot.embed.appBaseUrl}${bot.embed.scriptPath}`;
+  const src = new URL(bot.embed.scriptPath, `${bot.embed.appBaseUrl.replace(/\/$/, "")}/`);
+  src.searchParams.set("v", WIDGET_SCRIPT_VERSION);
   const tracking = bot.tracking ?? EMPTY_TRACKING;
   const whatsapp = bot.whatsapp ?? EMPTY_WHATSAPP;
-  const lines = [
+  const connectionOrigins = new Set([
+    new URL(bot.embed.appBaseUrl).origin,
+    new URL(bot.embed.apiBaseUrl).origin,
+  ]);
+  const lines = Array.from(connectionOrigins, (origin) =>
+    `<link rel="preconnect" href="${origin}" crossorigin>`,
+  );
+  lines.push(
     `<script`,
-    `  src="${src}"`,
+    `  src="${src.toString()}"`,
     `  data-bot-id="${bot.id}"`,
     `  data-client-id="${bot.clientId}"`,
     `  data-api-base-url="${bot.embed.apiBaseUrl}"`,
-  ];
+  );
   if (tracking.gaMeasurementId) {
     lines.push(`  data-ga-id="${tracking.gaMeasurementId}"`);
   }

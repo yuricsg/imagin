@@ -46,7 +46,7 @@ type DashboardConfig = {
   specialty?: string;
 };
 
-type ChatbotConfig = {
+export type ChatbotConfig = {
   botId: string;
   name: string;
   flowKey: ConversationFlowKey;
@@ -96,6 +96,12 @@ type EmbeddedChatbotProps = {
    * while the panel is still hidden.
    */
   preloaded?: boolean;
+  /**
+   * The current loader has already started the public config request and will
+   * deliver its JSON response through postMessage. Older/direct embeds omit
+   * this flag and keep fetching the config themselves.
+   */
+  expectParentConfig?: boolean;
 };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -209,6 +215,7 @@ export function EmbeddedChatbot({
   pageUrl,
   parentOrigin,
   preloaded = false,
+  expectParentConfig = false,
 }: EmbeddedChatbotProps) {
   // Preloaded frames idle until the widget says the panel was opened.
   const [started, setStarted] = useState(!preloaded);
@@ -288,26 +295,89 @@ export function EmbeddedChatbot({
     sequenceRef.current += 1;
     introStartedRef.current = false;
 
+    let cancelled = false;
+    let configResolved = false;
+    let fallbackTimer: number | undefined;
+    let requestStarted = false;
+
+    function applyConfig(chatbot: ChatbotConfig) {
+      if (cancelled || configResolved) return;
+      configResolved = true;
+      if (fallbackTimer !== undefined) {
+        window.clearTimeout(fallbackTimer);
+      }
+      setConfig(chatbot);
+      setConfigError("");
+      setIsConfigLoading(false);
+    }
+
     async function loadConfig() {
+      if (requestStarted || configResolved) return;
+      requestStarted = true;
       const response = await fetch(
         `${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/config`,
+        { cache: "no-store" },
       );
       if (!response.ok) {
+        if (cancelled || configResolved) return;
         setConfigError("Não foi possível carregar este assistente.");
         setIsConfigLoading(false);
         return;
       }
 
       const body = (await response.json()) as { chatbot: ChatbotConfig };
-      setConfig(body.chatbot);
-      setConfigError("");
-      setIsConfigLoading(false);
+      if (!isChatbotConfig(body.chatbot, botId)) {
+        throw new Error("Invalid chatbot config response");
+      }
+      applyConfig(body.chatbot);
     }
-    void loadConfig().catch(() => {
-      setConfigError("Não foi possível carregar este assistente.");
-      setIsConfigLoading(false);
-    });
-  }, [botId, clearScheduledMessages]);
+
+    function loadConfigWithErrorHandling() {
+      void loadConfig().catch(() => {
+        if (cancelled || configResolved) return;
+        setConfigError("Não foi possível carregar este assistente.");
+        setIsConfigLoading(false);
+      });
+    }
+
+    function onParentConfig(event: MessageEvent) {
+      if (event.source !== window.parent) return;
+      if (parentOrigin && event.origin !== parentOrigin) return;
+      const data = event.data as
+        | { type?: string; chatbot?: unknown }
+        | null;
+
+      if (data?.type === "imagin:config") {
+        if (isChatbotConfig(data.chatbot, botId)) {
+          applyConfig(data.chatbot);
+        }
+        return;
+      }
+
+      if (data?.type === "imagin:config-unavailable") {
+        loadConfigWithErrorHandling();
+      }
+    }
+
+    window.addEventListener("message", onParentConfig);
+
+    if (expectParentConfig) {
+      postToParent(parentOrigin, { type: "imagin:config-ready" });
+      // Compatibility fallback for a partially updated/cached loader. The
+      // normal path resolves from postMessage and never reaches this timer.
+      fallbackTimer = window.setTimeout(loadConfigWithErrorHandling, 5000);
+    } else {
+      loadConfigWithErrorHandling();
+    }
+
+    return () => {
+      cancelled = true;
+      if (fallbackTimer !== undefined) {
+        window.clearTimeout(fallbackTimer);
+      }
+      window.removeEventListener("message", onParentConfig);
+    };
+  }, [botId, clearScheduledMessages, expectParentConfig, parentOrigin]);
 
   useEffect(() => {
     return () => {
@@ -802,4 +872,19 @@ function postToParent(parentOrigin: string | undefined, message: unknown) {
   } catch {
     window.parent.postMessage(message, "*");
   }
+}
+
+function isChatbotConfig(value: unknown, expectedBotId: string): value is ChatbotConfig {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Partial<ChatbotConfig>;
+  return (
+    config.botId === expectedBotId &&
+    typeof config.name === "string" &&
+    typeof config.flowKey === "string" &&
+    Array.isArray(config.buttonTexts) &&
+    Array.isArray(config.examOptions) &&
+    Array.isArray(config.medicalRequestOptions) &&
+    Array.isArray(config.consultationNeeds) &&
+    Array.isArray(config.consultationDecisions)
+  );
 }

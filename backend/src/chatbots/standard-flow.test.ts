@@ -217,3 +217,43 @@ test("fillDashboardWhatsAppTemplate leaves unknown tokens untouched", () => {
     "Oi Ana — {desconhecido}",
   );
 });
+
+test("removes unanswered branch variables from the WhatsApp handoff", () => {
+  const message = formatStandardWhatsAppMessage(
+    lead({
+      name: "Gardenia",
+      answers: {
+        "step-name": "Gardenia",
+        "step-action": "Schedule an exam",
+        "step-exam": ["Mapa 24h", "Holter 24h"],
+        "step-request": "No medical request",
+      },
+    }),
+    {
+      name: "Assistant",
+      whatsapp: {
+        messageTemplate:
+          "Hi, my name is {nome}. {agendar}:\n{exame} {solicitacao}\n{quem} {motivo}",
+      },
+      flow: {
+        dialogue: {
+          steps: [
+            { id: "step-name", saveAs: "name" },
+            { id: "step-action", saveAs: "agendar" },
+            { id: "step-exam", saveAs: "exame" },
+            { id: "step-request", saveAs: "solicitacao" },
+            { id: "step-who", saveAs: "quem" },
+            { id: "step-reason", saveAs: "motivo" },
+          ],
+        },
+      },
+    },
+  );
+
+  assert.equal(
+    message,
+    "Hi, my name is Gardenia. Schedule an exam:\nMapa 24h, Holter 24h No medical request",
+  );
+  assert.ok(!message.includes("{quem}"));
+  assert.ok(!message.includes("{motivo}"));
+});

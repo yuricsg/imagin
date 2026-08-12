@@ -2,7 +2,11 @@ import type { ChatbotInput } from "./create";
 import { DEFAULT_EMBED } from "./create";
 import { FLOW_TEMPLATES, validateDialogueFlow } from "./flows";
 import { isValidGaMeasurementId, isValidMetaPixelId } from "./tracking";
-import { isValidWhatsAppPhone, normalizeWhatsAppPhone } from "./whatsapp";
+import {
+  findUnknownWhatsAppTemplateTokens,
+  isValidWhatsAppPhone,
+  normalizeWhatsAppPhone,
+} from "./whatsapp";
 
 export type ChatbotField = keyof ChatbotInput;
 
@@ -113,6 +117,16 @@ export function validateChatbotInput(input: ChatbotInput): ChatbotFieldErrors | 
     if (!input.whatsappMessageTemplate.trim()) {
       errors.whatsappMessageTemplate =
         "Escreva a mensagem que será enviada ao abrir o WhatsApp.";
+    } else {
+      const unknownTokens = findUnknownWhatsAppTemplateTokens(
+        input.whatsappMessageTemplate,
+        input.flowDialogue?.customSaveLabels,
+      );
+      if (unknownTokens.length > 0) {
+        errors.whatsappMessageTemplate = `Unknown WhatsApp variables: ${unknownTokens
+          .map((token) => `{${token}}`)
+          .join(", ")}. Use only the variables offered by the editor.`;
+      }
     }
   }
 

@@ -148,6 +148,58 @@ describe("validateChatbotInput", () => {
     });
   });
 
+  it("rejects WhatsApp variables that are not defined by the dialogue", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "", phoneNumber: "+55 11 99999-0000" },
+        ],
+        whatsappMessageTemplate: "Hello {nome} {typo}",
+      }),
+    ).toMatchObject({
+      whatsappMessageTemplate:
+        "Unknown WhatsApp variables: {typo}. Use only the variables offered by the editor.",
+    });
+  });
+
+  it("accepts WhatsApp variables defined by the dialogue", () => {
+    expect(
+      validateChatbotInput({
+        ...validInput,
+        whatsappEnabled: true,
+        whatsappDestinations: [
+          { id: "a", label: "", phoneNumber: "+55 11 99999-0000" },
+        ],
+        whatsappMessageTemplate: "Hello {nome} {exame}",
+        flowDialogue: {
+          version: 1,
+          shape: "linear",
+          greeting: "Hello",
+          startStepId: "name",
+          steps: [
+            {
+              id: "name",
+              question: "Name?",
+              inputType: "text",
+              required: true,
+              saveAs: "name",
+            },
+            {
+              id: "exam",
+              question: "Exam?",
+              inputType: "text",
+              required: true,
+              saveAs: "exame",
+            },
+          ],
+          customSaveLabels: { exame: "Exam" },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("accepts several destinations when each has a name and a number", () => {
     expect(
       validateChatbotInput({

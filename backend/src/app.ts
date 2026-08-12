@@ -68,7 +68,17 @@ export function createApp(options: AppOptions = {}) {
   app.use(
     "/api/*",
     cors({
-      origin: (origin) => {
+      origin: (origin, c) => {
+        // The loader runs on customer-owned sites and only reads this
+        // public-safe resource. Keep every other API route on the dashboard
+        // allowlist so broad embed access cannot reach administrative data.
+        if (
+          (c.req.method === "GET" || c.req.method === "OPTIONS") &&
+          isPublicChatbotConfigPath(c.req.path)
+        ) {
+          return "*";
+        }
+
         if (!origin || isAllowedOrigin(origin, corsOrigins)) {
           return origin || corsOrigins[0] || "*";
         }
@@ -168,7 +178,9 @@ export function createApp(options: AppOptions = {}) {
       return c.json({ error: "Chatbot not found" }, 404);
     }
 
-    c.header("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+    // Operators expect launcher edits to be visible on customer sites after a
+    // reload. The widget is tiny, but its per-bot configuration is dynamic.
+    c.header("Cache-Control", "no-store");
     return c.json({ chatbot: toPublicChatbotConfig(chatbot) });
   });
 
@@ -463,6 +475,10 @@ function isAllowedOrigin(origin: string, corsOrigins: string[]) {
     corsOrigins.includes(origin) ||
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
   );
+}
+
+function isPublicChatbotConfigPath(pathname: string) {
+  return /^\/api\/public\/chatbots\/[^/]+\/config$/.test(pathname);
 }
 
 function getRequestIp(request: Request) {

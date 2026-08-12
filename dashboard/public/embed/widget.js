@@ -12,6 +12,7 @@
   const rootId = `imagin-widget-${botId}-${clientId}`;
   const DEFAULT_TEASER = "Olá! Posso te ajudar?";
   const DEFAULT_AVATAR = `${appOrigin.replace(/\/$/, "")}/embed/robot-helper.webp`;
+  const PRELOAD_DELAY_MS = 900;
 
   if (document.getElementById(rootId)) {
     return;
@@ -262,15 +263,19 @@
       return iframe;
     }
 
-    const url = new URL(`/chatbots/${encodeURIComponent(botId)}/embed`, appOrigin);
+    const url = new URL("/embed/chat", appOrigin);
     const attribution = collectAttribution();
 
+    url.searchParams.set("botId", botId);
     url.searchParams.set("clientId", clientId);
     url.searchParams.set("parentOrigin", window.location.origin);
     url.searchParams.set("pageUrl", window.location.href);
     url.searchParams.set("attribution", JSON.stringify(attribution));
     // The page idles (no intro, no tracking session) until imagin:open.
     url.searchParams.set("preload", "1");
+    // The new static embed shell waits for the loader's already-started
+    // config request instead of issuing the same request a second time.
+    url.searchParams.set("configHandoff", "1");
 
     const loading = document.createElement("div");
     loading.className = "imagin-loading";
@@ -295,6 +300,7 @@
       // Covers the click-before-load race: the open signal sent by openPanel
       // is lost when the page isn't there yet, so re-send it once it is.
       notifyOpen();
+      sendPublicConfigToIframe();
     });
     panel.appendChild(iframe);
 
@@ -312,7 +318,7 @@
     }
     try {
       iframe.contentWindow.postMessage({ type: "imagin:open" }, appOrigin);
-    } catch (error) {
+    } catch {
       // Ignore — worst case the next openPanel/load event resends it.
     }
   }
@@ -368,7 +374,16 @@
 
     const data = event.data;
 
-    if (!data || data.type !== "imagin:resize") {
+    if (!data) {
+      return;
+    }
+
+    if (data.type === "imagin:config-ready") {
+      sendPublicConfigToIframe();
+      return;
+    }
+
+    if (data.type !== "imagin:resize") {
       return;
     }
 
@@ -380,10 +395,19 @@
     }
   });
 
-  function loadPublicConfig() {
-    fetch(`${apiBaseUrl}/api/public/chatbots/${encodeURIComponent(botId)}/config`, {
-      cache: "force-cache",
-    })
+  let publicConfigPromise = null;
+
+  function getPublicConfig() {
+    if (publicConfigPromise) {
+      return publicConfigPromise;
+    }
+
+    publicConfigPromise = fetch(
+      `${apiBaseUrl.replace(/\/$/, "")}/api/public/chatbots/${encodeURIComponent(botId)}/config`,
+      {
+        cache: "no-store",
+      },
+    )
       .then(function (response) {
         if (!response.ok) {
           throw new Error("Chatbot config request failed");
@@ -393,7 +417,9 @@
       })
       .then(function (body) {
         const chatbot = body && body.chatbot ? body.chatbot : null;
-        if (!chatbot) return;
+        if (!chatbot) {
+          throw new Error("Chatbot config response is missing chatbot data");
+        }
 
         const launcherConfig = chatbot.launcher;
         const fromLauncher =
@@ -439,10 +465,39 @@
           }
           avatar.src = avatarUrl;
         }
+
+        return chatbot;
       })
-      .catch(function () {
+      .catch(function (error) {
         // Keep the default teaser/avatar when public config is unavailable.
+        console.warn("[Imagin widget] Could not load the public chatbot config.", error);
+        return null;
       });
+
+    return publicConfigPromise;
+  }
+
+  function loadPublicConfig() {
+    void getPublicConfig();
+  }
+
+  function sendPublicConfigToIframe() {
+    if (!iframe || !iframe.contentWindow) {
+      return;
+    }
+
+    getPublicConfig().then(function (chatbot) {
+      if (!iframe || !iframe.contentWindow) {
+        return;
+      }
+
+      iframe.contentWindow.postMessage(
+        chatbot
+          ? { type: "imagin:config", chatbot: chatbot }
+          : { type: "imagin:config-unavailable" },
+        appOrigin,
+      );
+    });
   }
 
   function warmUpApi() {
@@ -455,7 +510,7 @@
         mode: "no-cors",
         cache: "no-store",
       }).catch(function () {});
-    } catch (error) {
+    } catch {
       // Ignore — the warm-up is best-effort.
     }
   }
@@ -469,12 +524,9 @@
   }
 
   function schedulePreload() {
-    // Preload the chat page while the panel is still closed so opening it is
-    // instant. Trigger is the visitor's FIRST interaction (scroll/touch/key),
-    // not a timer: Lighthouse/PageSpeed never interacts, so the ~270KB chat
-    // app stays out of the site's mobile score, and visitors who never engage
-    // never download it. The page knows it was preloaded (preload=1) and
-    // idles until the imagin:open signal.
+    // Preload shortly after the customer page settles so a first tap does not
+    // pay the iframe + hydration cost. Any real interaction preloads
+    // immediately. Data Saver and 2G users keep the on-demand behavior.
     const connection = navigator.connection;
     if (
       connection &&
@@ -487,21 +539,37 @@
 
     const events = ["scroll", "touchstart", "pointerdown", "keydown"];
 
-    function preloadNow() {
+    let preloadTimer = null;
+
+    function removePreloadTriggers() {
       // `once` removes only the event that fired; drop the siblings too.
       events.forEach(function (name) {
         window.removeEventListener(name, preloadNow);
       });
-      if ("requestIdleCallback" in window) {
-        window.requestIdleCallback(ensureIframe, { timeout: 4000 });
-      } else {
-        ensureIframe();
+      if (preloadTimer !== null) {
+        window.clearTimeout(preloadTimer);
+        preloadTimer = null;
       }
+    }
+
+    function preloadNow() {
+      removePreloadTriggers();
+      ensureIframe();
     }
 
     events.forEach(function (name) {
       window.addEventListener(name, preloadNow, { passive: true, once: true });
     });
+
+    function scheduleAfterPageLoad() {
+      preloadTimer = window.setTimeout(preloadNow, PRELOAD_DELAY_MS);
+    }
+
+    if (document.readyState === "complete") {
+      scheduleAfterPageLoad();
+    } else {
+      window.addEventListener("load", scheduleAfterPageLoad, { once: true });
+    }
   }
 
   schedulePreload();

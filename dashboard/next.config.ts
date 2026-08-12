@@ -21,6 +21,19 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/embed/chat",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
+          },
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow",
+          },
+        ],
+      },
     ];
   },
 };
