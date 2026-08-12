@@ -470,23 +470,38 @@
 
   function schedulePreload() {
     // Preload the chat page while the panel is still closed so opening it is
-    // instant. Waits for the site's own load + a beat of idle time to never
-    // compete with the client page's critical resources. The page knows it
-    // was preloaded (preload=1) and idles until the imagin:open signal.
+    // instant. Trigger is the visitor's FIRST interaction (scroll/touch/key),
+    // not a timer: Lighthouse/PageSpeed never interacts, so the ~270KB chat
+    // app stays out of the site's mobile score, and visitors who never engage
+    // never download it. The page knows it was preloaded (preload=1) and
+    // idles until the imagin:open signal.
+    const connection = navigator.connection;
+    if (
+      connection &&
+      (connection.saveData || /(^|-)2g$/.test(connection.effectiveType || ""))
+    ) {
+      // Data saver / very slow network: load only on demand, when the
+      // visitor actually opens the chat.
+      return;
+    }
+
+    const events = ["scroll", "touchstart", "pointerdown", "keydown"];
+
     function preloadNow() {
+      // `once` removes only the event that fired; drop the siblings too.
+      events.forEach(function (name) {
+        window.removeEventListener(name, preloadNow);
+      });
       if ("requestIdleCallback" in window) {
         window.requestIdleCallback(ensureIframe, { timeout: 4000 });
       } else {
         ensureIframe();
       }
     }
-    if (document.readyState === "complete") {
-      window.setTimeout(preloadNow, 2000);
-    } else {
-      window.addEventListener("load", function () {
-        window.setTimeout(preloadNow, 2000);
-      });
-    }
+
+    events.forEach(function (name) {
+      window.addEventListener(name, preloadNow, { passive: true, once: true });
+    });
   }
 
   schedulePreload();
